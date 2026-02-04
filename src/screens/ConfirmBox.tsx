@@ -10,35 +10,43 @@ import {
   ListRenderItem,
 } from 'react-native';
 
-/**
- * Professional Warehousing Scanning Confirmation Screen
- * Clean, high-contrast UI for industrial/warehouse environments.
- */
-
-/** ✅ Type for a scanned item */
 interface WSCItem {
   id: string;
   code: string;
   qty: number;
   model: string;
   color: string;
+  snItems?: { id: string; sn: string; imei1: string; imei2: string }[];
 }
 
 export default function WSCTableScreen({ navigation }: any) {
-  // State for scanned items
   const [items, setItems] = useState<WSCItem[]>([
-    { id: '1', code: 'BX-1001', qty: 5, model: 'Alpha', color: 'Red' },
-    { id: '2', code: 'BX-1002', qty: 3, model: 'Core-X', color: 'Blue' },
-    { id: '3', code: 'BX-1003', qty: 2, model: 'Prime', color: 'Green' },
+    { 
+      id: '1', code: 'BX-1001', qty: 5, model: 'Alpha', color: 'Red',
+      snItems: [
+        { id: '1', sn: 'SN-9901', imei1: '358291002231', imei2: '358291002232' },
+        { id: '2', sn: 'SN-9902', imei1: '358291002241', imei2: '358291002242' },
+      ]
+    },
+    { 
+      id: '2', code: 'BX-1002', qty: 3, model: 'Core-X', color: 'Blue',
+      snItems: [
+        { id: '3', sn: 'SN-9903', imei1: '358291002251', imei2: '358291002252' },
+      ]
+    },
+    { 
+      id: '3', code: 'BX-1003', qty: 2, model: 'Prime', color: 'Green',
+      snItems: []
+    },
   ]);
 
-  // Calculate total quantity using useMemo for performance
+  const [selectedItem, setSelectedItem] = useState<WSCItem | null>(null);
+
   const totalQty = useMemo<number>(
     () => items.reduce((sum, i) => sum + i.qty, 0),
     [items]
   );
 
-  // Handle batch confirmation logic
   const confirmBatch = (): void => {
     if (items.length === 0) {
       Alert.alert('System Info', 'No active scans found to confirm.');
@@ -54,6 +62,7 @@ export default function WSCTableScreen({ navigation }: any) {
           text: 'Confirm',
           onPress: () => {
             setItems([]);
+            setSelectedItem(null);
             Alert.alert('Success', 'Batch processed and inventory updated.');
           },
         },
@@ -61,44 +70,44 @@ export default function WSCTableScreen({ navigation }: any) {
     );
   };
 
-  // Display detailed manifest
   const showBarcodeDetails = (): void => {
-    if (items.length === 0) {
-      Alert.alert('System Info', 'The manifest is currently empty.');
+    if (!selectedItem) {
+      Alert.alert('Select Box', 'Please select a box to view details.');
       return;
     }
 
-    const details = items
-      .map(i => `• ${i.code}: Qty ${i.qty} [${i.model} - ${i.color}]`)
-      .join('\n');
-
-    Alert.alert('Manifest Details', details);
-    
-    navigation.navigate("WSdetail");
+    navigation.navigate('WSdetail', {
+      boxCode: selectedItem.code,
+      snItems: selectedItem.snItems || [],
+    });
   };
 
-  // Table row renderer
   const renderItem: ListRenderItem<WSCItem> = ({ item, index }) => (
-    <View style={[styles.row, index % 2 === 0 ? styles.rowEven : styles.rowOdd]}>
+    <TouchableOpacity
+      onPress={() => setSelectedItem(item)}
+      style={[
+        styles.row,
+        index % 2 === 0 ? styles.rowEven : styles.rowOdd,
+        selectedItem?.id === item.id && { backgroundColor: '#dbeafe' },
+      ]}
+    >
       <Text style={[styles.cell, styles.cellNo]}>{index + 1}</Text>
       <Text style={[styles.cell, styles.cellCode]}>{item.code}</Text>
       <Text style={[styles.cell, styles.cellQty]}>{item.qty}</Text>
       <Text style={[styles.cell, styles.cellModel]}>{item.model}</Text>
       <Text style={[styles.cell, styles.cellColor]}>{item.color}</Text>
-    </View>
+    </TouchableOpacity>
   );
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
 
-      {/* HEADER SECTION */}
       <View style={styles.header}>
-        <Text style={styles.title}>Warehousing Scanning confirm</Text>
+        <Text style={styles.title}>Warehousing Scanning Confirm</Text>
         <Text style={styles.subtitle}>Batch Confirmation Dashboard</Text>
       </View>
 
-      {/* SUMMARY CARD */}
       <View style={styles.summaryCard}>
         <View>
           <Text style={styles.summaryLabel}>Total Scanned</Text>
@@ -107,13 +116,10 @@ export default function WSCTableScreen({ navigation }: any) {
         <View style={styles.summaryDivider} />
         <View>
           <Text style={styles.summaryLabel}>Net Quantity</Text>
-          <Text style={[styles.summaryValue, { color: '#2563eb' }]}>
-            {totalQty} Units
-          </Text>
+          <Text style={[styles.summaryValue, { color: '#2563eb' }]}>{totalQty} Units</Text>
         </View>
       </View>
 
-      {/* TABLE HEADER */}
       <View style={styles.tableHeader}>
         <Text style={[styles.headerCell, styles.cellNo]}>No</Text>
         <Text style={[styles.headerCell, styles.cellCode]}>Box Code</Text>
@@ -122,7 +128,6 @@ export default function WSCTableScreen({ navigation }: any) {
         <Text style={[styles.headerCell, styles.cellColor]}>Color</Text>
       </View>
 
-      {/* DATA LIST */}
       <FlatList
         data={items}
         keyExtractor={(item) => item.id}
@@ -135,7 +140,6 @@ export default function WSCTableScreen({ navigation }: any) {
         }
       />
 
-      {/* ACTION PANEL */}
       <View style={styles.actionPanel}>
         <View style={styles.buttonRow}>
           <TouchableOpacity
@@ -157,7 +161,7 @@ export default function WSCTableScreen({ navigation }: any) {
 
         <TouchableOpacity
           style={styles.exitBtn}
-          onPress={() => Alert.alert('Exit', 'Terminate current session?')}
+          onPress={() => navigation.goBack()}
         >
           <Text style={styles.exitText}>Close Terminal</Text>
         </TouchableOpacity>
@@ -165,6 +169,9 @@ export default function WSCTableScreen({ navigation }: any) {
     </View>
   );
 }
+
+// Styles restent les mêmes que ton code original
+
 
 const styles = StyleSheet.create({
   container: {
@@ -177,7 +184,7 @@ const styles = StyleSheet.create({
     paddingBottom: 15,
   },
   title: {
-    fontSize: 26,
+    fontSize: 25,
     fontWeight: '900',
     color: '#0f172a',
     letterSpacing: -0.5,

@@ -50,7 +50,8 @@ export default function Menu() {
         ))}
       </View>
 
-      <TouchableOpacity style={styles.exitButton}>
+      <TouchableOpacity style={styles.exitButton}
+      onPress={() => navigation.goBack()}>
         <Text style={styles.exitText}>EXIT</Text>
       </TouchableOpacity>
     </ScrollView>
