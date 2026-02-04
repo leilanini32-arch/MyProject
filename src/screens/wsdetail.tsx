@@ -6,6 +6,7 @@ import {
   StyleSheet,
   SafeAreaView,
   ListRenderItem,
+  TouchableOpacity,
 } from 'react-native';
 
 interface WSSNItem {
@@ -40,54 +41,74 @@ export default function WSSNTableScreen({ route, navigation }: WSSNTableProps) {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* HEADER */}
-      <View style={styles.header}>
-        <Text style={styles.title}>SN Details</Text>
+      {/* CONTENT */}
+      <View style={styles.content}>
+        {/* HEADER */}
+        <View style={styles.header}>
+          <Text style={styles.title}>SN Details</Text>
 
-        <View style={styles.summaryRow}>
-          <View style={styles.summaryItem}>
-            <Text style={styles.label}>Pallet Code</Text>
-            <Text style={styles.value}>{palletCode}</Text>
-          </View>
-          <View style={styles.summaryItem}>
-            <Text style={styles.label}>Box Code</Text>
-            <Text style={styles.value}>{boxCode}</Text>
-          </View>
-          <View style={styles.summaryItem}>
-            <Text style={styles.label}>Total SN</Text>
-            <Text style={[styles.value, { color: '#16a34a' }]}>{totalSN}</Text>
+          <View style={styles.summaryRow}>
+            <View style={styles.summaryItem}>
+              <Text style={styles.label}>Pallet Code</Text>
+              <Text style={styles.value}>{palletCode}</Text>
+            </View>
+            <View style={styles.summaryItem}>
+              <Text style={styles.label}>Box Code</Text>
+              <Text style={styles.value}>{boxCode}</Text>
+            </View>
+            <View style={styles.summaryItem}>
+              <Text style={styles.label}>Total SN</Text>
+              <Text style={[styles.value, { color: '#16a34a' }]}>{totalSN}</Text>
+            </View>
           </View>
         </View>
+
+        {/* TABLE HEADER */}
+        <View style={styles.tableHeader}>
+          <Text style={[styles.headerText, styles.cellNo]}>No</Text>
+          <Text style={[styles.headerText, styles.cellSN]}>SN</Text>
+          <Text style={[styles.headerText, styles.cellIMEI]}>IMEI 1</Text>
+          <Text style={[styles.headerText, styles.cellIMEI]}>IMEI 2</Text>
+        </View>
+
+        {/* DATA LIST */}
+        <FlatList
+          data={snItems}
+          keyExtractor={(item) => item.id}
+          renderItem={renderItem}
+          contentContainerStyle={styles.listContainer}
+          ListEmptyComponent={
+            <Text style={styles.emptyText}>No SN data available.</Text>
+          }
+        />
       </View>
 
-      {/* TABLE HEADER */}
-      <View style={styles.tableHeader}>
-        <Text style={[styles.headerText, styles.cellNo]}>No</Text>
-        <Text style={[styles.headerText, styles.cellSN]}>SN</Text>
-        <Text style={[styles.headerText, styles.cellIMEI]}>IMEI 1</Text>
-        <Text style={[styles.headerText, styles.cellIMEI]}>IMEI 2</Text>
-      </View>
-
-      {/* DATA LIST */}
-      <FlatList
-        data={snItems}
-        keyExtractor={(item) => item.id}
-        renderItem={renderItem}
-        contentContainerStyle={styles.listContainer}
-        ListEmptyComponent={<Text style={styles.emptyText}>No SN data available.</Text>}
-      />
+      {/* EXIT BUTTON BOTTOM */}
+      <TouchableOpacity
+        activeOpacity={0.8}
+        style={[styles.button, styles.secondaryButton]}
+        onPress={() => navigation.goBack()}
+      >
+        <Text style={styles.secondaryButtonText}>Exit</Text>
+      </TouchableOpacity>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8fafc' },
+
+  content: {
+    flex: 1,
+  },
+
   header: {
     padding: 20,
     backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#e2e8f0',
   },
+
   title: {
     fontSize: 24,
     fontWeight: '900',
@@ -95,6 +116,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     textAlign: 'center',
   },
+
   summaryRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -102,9 +124,22 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 12,
   },
+
   summaryItem: { alignItems: 'center', flex: 1 },
-  label: { fontSize: 10, color: '#64748b', fontWeight: '800', textTransform: 'uppercase', marginBottom: 2 },
-  value: { fontSize: 16, fontWeight: '800', color: '#1e293b' },
+
+  label: {
+    fontSize: 10,
+    color: '#64748b',
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    marginBottom: 2,
+  },
+
+  value: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#1e293b',
+  },
 
   tableHeader: {
     flexDirection: 'row',
@@ -116,17 +151,78 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 10,
     borderTopRightRadius: 10,
   },
-  headerText: { color: '#fff', fontSize: 11, fontWeight: '800', textAlign: 'center', textTransform: 'uppercase' },
 
-  listContainer: { backgroundColor: '#fff', marginHorizontal: 10, borderBottomLeftRadius: 10, borderBottomRightRadius: 10, elevation: 2 },
-  row: { flexDirection: 'row', paddingVertical: 15, paddingHorizontal: 10, borderBottomWidth: 1, borderBottomColor: '#f1f5f9', alignItems: 'center' },
+  headerText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '800',
+    textAlign: 'center',
+    textTransform: 'uppercase',
+  },
+
+  listContainer: {
+    backgroundColor: '#fff',
+    marginHorizontal: 10,
+    borderBottomLeftRadius: 10,
+    borderBottomRightRadius: 10,
+    elevation: 2,
+  },
+
+  row: {
+    flexDirection: 'row',
+    paddingVertical: 15,
+    paddingHorizontal: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+    alignItems: 'center',
+  },
+
   rowEven: { backgroundColor: '#fff' },
   rowOdd: { backgroundColor: '#f8fafc' },
 
-  cell: { fontSize: 12, color: '#334155', fontWeight: '600', textAlign: 'center' },
+  cell: {
+    fontSize: 12,
+    color: '#334155',
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+
   cellNo: { flex: 0.4 },
   cellSN: { flex: 1.2, fontWeight: '800', color: '#2563eb' },
   cellIMEI: { flex: 2, fontSize: 11, color: '#64748b' },
 
-  emptyText: { textAlign: 'center', padding: 40, color: '#94a3b8', fontWeight: '600' },
+  emptyText: {
+    textAlign: 'center',
+    padding: 40,
+    color: '#94a3b8',
+    fontWeight: '600',
+  },
+
+  secondaryButton: {
+    backgroundColor: "#FEE2E2",
+    shadowColor: "#EF4444",
+    shadowOpacity: 0.1,
+    borderWidth: 1,
+    borderColor: "#FECACA",
+  },
+  button: {
+    width: '90%',
+    paddingVertical: 14, // hauteur confortable
+    borderRadius: 12,
+    alignItems: 'center',
+    marginHorizontal: 20, // 100% width
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+    backgroundColor: "#FEE2E2",
+    marginBottom :10,
+  },
+  secondaryButtonText: {
+    color: "#EF4444",
+    fontWeight: "800",
+    fontSize: 16,
+  },
+
 });

@@ -85,7 +85,7 @@ export default function WSCTableScreen({ navigation }: any) {
   const renderItem: ListRenderItem<WSCItem> = ({ item, index }) => (
     <TouchableOpacity
       onPress={() => setSelectedItem(item)}
-      style={[
+      style={[   
         styles.row,
         index % 2 === 0 ? styles.rowEven : styles.rowOdd,
         selectedItem?.id === item.id && { backgroundColor: '#dbeafe' },
