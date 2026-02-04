@@ -1,244 +1,375 @@
 import React, { useState } from "react";
 import {
+  View,
   Text,
   TextInput,
-  ScrollView,
   TouchableOpacity,
   StyleSheet,
-  View,
+  KeyboardAvoidingView,
+  Platform,
+  Alert,
+  ScrollView,
+  SafeAreaView,
+  Modal,
+  FlatList,
 } from "react-native";
 
-import { Picker } from "@react-native-picker/picker";
-import DropDownPicker from "react-native-dropdown-picker";
+/* =====================
+   Custom Input avec Focus
+===================== */
+const CustomInput = ({
+  label,
+  value,
+  placeholder,
+  isSelect = false,
+  onChangeText,
+  options = [],
+}: any) => {
+  const [showModal, setShowModal] = useState(false);
+  const [isFocused, setIsFocused] = useState(false); // focus
 
-export default function Login({ navigation }: any) {
-  const [classe, setClasse] = useState("");
-  const [usercode, setUsercode] = useState("");
-  const [password, setPassword] = useState("");
-  const [bwdSave, setBwdSave] = useState(false);
-
-  const [open, setOpen] = useState(false);
-  const [warehouseApi, setWarehouseApi] = useState<string[]>([]);
-  const [items, setItems] = useState([
-    { label: "WH A", value: "whA" },
-    { label: "WH B", value: "whB" },
-    { label: "WH C", value: "whC" },
-  ]);
-
-  const fetchUserInfo = async (code: string) => {
-    try {
-      const response = await fetch(`http://10.0.2.2:3000/users/${code}`);
-      const data = await response.json();
-      setPassword(data.password);
-    } catch {
-      setPassword("");
-    }
-  };
-
-  const handleLogin = () => {
-    navigation.navigate("Menu");
-  };
-
-  const handleExit = () => {
-    // Ici tu peux ajouter une action exit
-    console.log("Exit pressed");
+  const handleSelect = (item: string) => {
+    onChangeText(item);
+    setShowModal(false);
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>Intelligent Warehouse Management</Text>
+    <View style={styles.inputWrapper}>
+      <Text style={styles.label}>{label}</Text>
 
-      {/* Classe */}
-      <Text style={styles.label}>Classe</Text>
-      <View style={styles.pickerWrapper}>
-        <Picker
-          selectedValue={classe}
-          onValueChange={setClasse}
-          style={styles.picker}
+      {isSelect ? (
+        <TouchableOpacity
+          style={[styles.inputContainer, isFocused && styles.inputFocused]}
+          onPress={() => setShowModal(true)}
+          activeOpacity={0.7}
         >
-          <Picker.Item label="Select Classe..." value="" />
-          <Picker.Item label="Classe 1" value="c1" />
-          <Picker.Item label="Classe 2" value="c2" />
-        </Picker>
-      </View>
+          <Text style={value ? styles.input : styles.placeholderText}>
+            {value || placeholder}
+          </Text>
+          <Text style={styles.chevronIcon}>▼</Text>
+        </TouchableOpacity>
+      ) : (
+        <View style={[styles.inputContainer, isFocused && styles.inputFocused]}>
+          <TextInput
+            value={value}
+            onChangeText={onChangeText}
+            placeholder={placeholder}
+            placeholderTextColor="#94a3b8"
+            style={styles.input}
+            onFocus={() => setIsFocused(true)}
+            onBlur={() => setIsFocused(false)}
+          />
+        </View>
+      )}
 
-      {/* Usercode */}
-      <Text style={styles.label}>Usercode</Text>
-      <TextInput
-        placeholder="Scan Usercode"
-        value={usercode}
-        onChangeText={setUsercode}
-        style={styles.input}
-        onSubmitEditing={() => fetchUserInfo(usercode)}
-      />
+      {isSelect && (
+        <Modal transparent visible={showModal} animationType="fade">
+          <TouchableOpacity
+            style={styles.modalOverlay}
+            activeOpacity={1}
+            onPress={() => setShowModal(false)}
+          >
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>Select {label}</Text>
+              <FlatList
+                data={options}
+                keyExtractor={(item) => item}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={styles.optionItem}
+                    onPress={() => handleSelect(item)}
+                  >
+                    <Text style={styles.optionText}>{item}</Text>
+                  </TouchableOpacity>
+                )}
+              />
+            </View>
+          </TouchableOpacity>
+        </Modal>
+      )}
+    </View>
+  );
+};
 
-      {/* Password */}
-      <Text style={styles.label}>Password</Text>
-      <TextInput
-        placeholder="Password"
-        value={password}
-        style={styles.input}
-        editable={false}
-      />
+/* =====================
+   Login Screen
+===================== */
+export default function Login({ navigation }: any) {
+  const [selectedClass, setSelectedClass] = useState("");
+  const [userCode, setUserCode] = useState("");
+  const [password, setPassword] = useState("");
+  const [selectedWarehouse, setSelectedWarehouse] = useState("");
 
-      {/* Warehouse API */}
-      <Text style={styles.label}>Warehouse API</Text>
-      <DropDownPicker
-        multiple
-        min={0}
-        max={items.length}
-        open={open}
-        value={warehouseApi}
-        items={items}
-        setOpen={setOpen}
-        setValue={setWarehouseApi}
-        setItems={setItems}
-        containerStyle={styles.dropdownContainer}
-        dropDownContainerStyle={styles.dropdownBox}
-        textStyle={styles.dropdownText}
-      />
+  const classOptions = ["Day", "Night", "Afternoon", "Evening"];
+  const warehouseOptions = [
+    "Main Logistics Center",
+    "North Wing Hub",
+    "South Terminal",
+    "East Storage Unit",
+    "Cold Storage Alpha",
+  ];
 
-      {/* PWD Save */}
-      <TouchableOpacity
-        style={styles.checkboxRow}
-        onPress={() => setBwdSave(!bwdSave)}
-        activeOpacity={0.7}
+  const handleLogin = () => {
+    if (!userCode || !password) {
+      Alert.alert("Error", "Please enter your credentials");
+      return;
+    }
+
+    if (userCode === "admin" && password === "admin") {
+      Alert.alert(
+        "Success",
+        `Login successful!\nClass: ${selectedClass}\nWarehouse: ${selectedWarehouse}`
+      );
+      navigation.navigate("Menu");
+    } else {
+      Alert.alert("Error", "Incorrect Password or Usercode");
+    }
+  };
+
+  const handleExit = () => {
+    Alert.alert("Exit", "Are you sure you want to close the application?", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Exit", style: "destructive" },
+    ]);
+  };
+
+  return (
+    <SafeAreaView style={styles.screen}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        <View style={[styles.checkbox, bwdSave && styles.checkboxChecked]} />
-        <Text style={styles.checkboxLabel}>PWD Save</Text>
-      </TouchableOpacity>
+        <ScrollView contentContainerStyle={styles.container}>
+          {/* Header */}
+          <View style={styles.header}>
+            <View style={styles.logoBox}>
+              <Text style={styles.logoText}>IWM</Text>
+            </View>
+            <Text style={styles.title}>Intelligent Warehouse Management</Text>
+            <Text style={styles.subtitle}>Log in to manage inventory</Text>
+          </View>
 
-      {/* Buttons */}
-      <View style={styles.buttonRow}>
-        <TouchableOpacity
-          style={[styles.button, styles.loginBtn]}
-          onPress={handleLogin}
-        >
-          <Text style={styles.buttonText}>LOGIN</Text>
-        </TouchableOpacity>
+          {/* Info Box */}
+          <View style={styles.infoBox}>
+            <Text style={styles.url}>mespdamobile.condor.dz</Text>
+            <Text style={styles.version}>Build V25.08.18</Text>
+          </View>
 
-        <TouchableOpacity
-          style={[styles.button, styles.exitBtn]}
-          onPress={handleExit}
-        >
-          <Text style={styles.buttonText}>EXIT</Text>
-        </TouchableOpacity>
-      </View>
-    </ScrollView>
+          {/* Form */}
+          <View style={styles.form}>
+            <CustomInput
+              label="Classes"
+              placeholder="Select Class"
+              value={selectedClass}
+              onChangeText={setSelectedClass}
+              isSelect
+              options={classOptions}
+            />
+
+            <CustomInput
+              label="User Code"
+              placeholder="Enter your ID"
+              value={userCode}
+              onChangeText={setUserCode}
+            />
+
+            <CustomInput
+              label="Password"
+              placeholder="••••••••"
+              value={password}
+              onChangeText={setPassword}
+            />
+
+            <CustomInput
+              label="Warehouse"
+              placeholder="Select Warehouse"
+              value={selectedWarehouse}
+              onChangeText={setSelectedWarehouse}
+              isSelect
+              options={warehouseOptions}
+            />
+          </View>
+
+          {/* Buttons */}
+          <View style={styles.buttonContainer}>
+            <TouchableOpacity
+              style={[styles.button, styles.primaryButton]}
+              onPress={handleLogin}
+            >
+              <Text style={styles.primaryButtonText}>LogIn</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.button, styles.secondaryButton]}
+              onPress={handleExit}
+            >
+              <Text style={styles.secondaryButtonText}>Close App</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
+/* =====================
+   Styles (Version 1 avec Focus)
+===================== */
 const styles = StyleSheet.create({
-  container: {
-    flexGrow: 1,
-    padding: 20,
-    backgroundColor: "#E0F2FE",
-  },
-
-  title: {
-    fontSize: 26,
-    fontWeight: "bold",
-    color: "#1E3A8A",
-    textAlign: "center",
-    marginBottom: 25,
-  },
-
-  label: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#1E40AF",
-    marginBottom: 6,
-  },
-
-  pickerWrapper: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    marginBottom: 15,
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: "#3B82F6",
-  },
-
-  picker: {
-    color: "#1E40AF",
-  },
-
-  input: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 15,
-    fontSize: 16,
-    borderWidth: 1,
-    borderColor: "#3B82F6",
-  },
-
-  dropdownContainer: {
-    marginBottom: 15,
-  },
-
-  dropdownBox: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#3B82F6",
-  },
-
-  dropdownText: {
-    color: "#1E40AF",
-    fontWeight: "600",
-  },
-
-  checkboxRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 20,
-  },
-
-  checkbox: {
-    width: 24,
-    height: 24,
-    borderWidth: 2,
-    borderColor: "#3B82F6",
-    borderRadius: 6,
-    marginRight: 10,
-    backgroundColor: "#fff",
-  },
-
-  checkboxChecked: {
-    backgroundColor: "#3B82F6",
-  },
-
-  checkboxLabel: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#1E40AF",
-  },
-
-  buttonRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-
-  button: {
+  screen: {
     flex: 1,
-    paddingVertical: 16,
-    borderRadius: 14,
+    backgroundColor: "#ffffff",
+  },
+  container: {
+    padding: 24,
+    paddingBottom: 40,
+  },
+  header: {
     alignItems: "center",
-    marginHorizontal: 6,
+    marginBottom: 16,
   },
-
-  loginBtn: {
-    backgroundColor: "#2563EB",
+  logoBox: {
+    width: 60,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: "#0052cc",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 10,
   },
-
-  exitBtn: {
-    backgroundColor: "#DC2626",
-  },
-
-  buttonText: {
+  logoText: {
     color: "#fff",
+    fontSize: 20,
+    fontWeight: "900",
+  },
+  title: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#0f172a",
+    textAlign: "center",
+    marginBottom: 4,
+  },
+  subtitle: {
+    fontSize: 13,
+    color: "#64748b",
+  },
+  infoBox: {
+    backgroundColor: "#f8fafc",
+    padding: 10,
+    borderRadius: 12,
+    alignItems: "center",
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  url: {
+    fontSize: 11,
+    color: "#94a3b8",
+    fontWeight: "700",
+  },
+  version: {
+    fontSize: 12,
+    fontWeight: "700",
+    marginTop: 2,
+    color: "#1e293b",
+  },
+  form: {
+    marginBottom: 12,
+  },
+  inputWrapper: {
+    marginBottom: 10,
+  },
+  label: {
+    fontSize: 11,
+    fontWeight: "700",
+    marginBottom: 4,
+    color: "#334155",
+  },
+  inputContainer: {
+    height: 65,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: "#e2e8f0",
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    backgroundColor: "#ffffff",
+  },
+  inputFocused: {
+    borderColor: "#0052cc",
+    backgroundColor: "#f8fbff",
+  },
+  input: {
+    flex: 1,
+    fontSize: 14,
+    color: "#0f172a",
+    paddingVertical: 0,
+  },
+  placeholderText: {
+    color: "#94a3b8",
+  },
+  chevronIcon: {
+    fontSize: 10,
+    color: "#94a3b8",
+    marginLeft: 6,
+  },
+  buttonContainer: {
+    gap: 10,
+    marginTop: 10,
+  },
+  button: {
+    height: 48,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  primaryButton: {
+    backgroundColor: "#0052cc",
+  },
+  primaryButtonText: {
+    color: "#fff",
+    fontWeight: "700",
     fontSize: 16,
-    fontWeight: "bold",
+  },
+  secondaryButton: {
+    borderWidth: 2,
+    borderColor: "#e2e8f0",
+  },
+  secondaryButtonText: {
+    fontWeight: "700",
+    fontSize: 16,
+    color: "#475569",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: "#fff",
+    width: "100%",
+    maxWidth: 400,
+    borderRadius: 16,
+    padding: 20,
+    maxHeight: "80%",
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#0f172a",
+    marginBottom: 16,
+    textAlign: "center",
+  },
+  optionItem: {
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f1f5f9",
+  },
+  optionText: {
+    fontSize: 16,
+    color: "#334155",
+    textAlign: "center",
   },
 });

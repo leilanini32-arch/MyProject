@@ -124,7 +124,8 @@ export default function WarehousingScanningScreen({ navigation }: any) {
 
       {/* BUTTONS */}
       <View style={styles.buttonRow}>
-        <TouchableOpacity style={[styles.button, styles.blue]}>
+        <TouchableOpacity style={[styles.button, styles.blue]}
+         onPress={() => navigation.navigate('ConfirmBox')}>
           <Text style={styles.buttonText}>Barcode Details</Text>
         </TouchableOpacity>
 
