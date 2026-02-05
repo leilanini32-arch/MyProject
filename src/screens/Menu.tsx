@@ -67,8 +67,7 @@ export default function Menu({ navigation }: any) {
       {/* ENTERPRISE HEADER */}
       <View style={styles.header}>
         <View>
-          <Text style={styles.headerSubtitle}>SYSTEM v2.5.4</Text>
-          <Text style={styles.headerTitle}>Warehouse PDA</Text>
+          <Text style={styles.headerTitle}>Warehouse Management</Text>
         </View>
       </View>
 

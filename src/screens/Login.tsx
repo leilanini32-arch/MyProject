@@ -1,4 +1,6 @@
 import React, { useState } from "react";
+import { BackHandler } from "react-native";
+
 import {
   View,
   Text,
@@ -22,11 +24,13 @@ const CustomInput = ({
   value,
   placeholder,
   isSelect = false,
+  isPassword = false,
   onChangeText,
   options = [],
 }: any) => {
   const [showModal, setShowModal] = useState(false);
-  const [isFocused, setIsFocused] = useState(false); // focus
+  const [isFocused, setIsFocused] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleSelect = (item: string) => {
     onChangeText(item);
@@ -56,9 +60,18 @@ const CustomInput = ({
             placeholder={placeholder}
             placeholderTextColor="#94a3b8"
             style={styles.input}
+            secureTextEntry={isPassword && !showPassword}
             onFocus={() => setIsFocused(true)}
             onBlur={() => setIsFocused(false)}
           />
+
+          {isPassword && (
+            <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+              <Text style={{ fontSize: 18 }}>
+                {showPassword ? "🙈" : "👁️"}
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
       )}
 
@@ -126,12 +139,17 @@ export default function Login({ navigation }: any) {
     }
   };
 
-  const handleExit = () => {
-    Alert.alert("Exit", "Are you sure you want to close the application?", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Exit", style: "destructive" },
-    ]);
-  };
+const handleExit = () => {
+  Alert.alert("Exit", "Are you sure you want to close the application?", [
+    { text: "Cancel", style: "cancel" },
+    {
+      text: "Exit",
+      style: "destructive",
+      onPress: () => BackHandler.exitApp(), 
+    },
+  ]);
+};
+
 
   return (
     <SafeAreaView style={styles.screen}>
@@ -178,6 +196,7 @@ export default function Login({ navigation }: any) {
               placeholder="••••••••"
               value={password}
               onChangeText={setPassword}
+              isPassword
             />
 
             <CustomInput
@@ -213,7 +232,7 @@ export default function Login({ navigation }: any) {
 }
 
 /* =====================
-   Styles (Version 1 avec Focus)
+   Styles
 ===================== */
 const styles = StyleSheet.create({
   screen: {
@@ -301,7 +320,7 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 20,
     color: "#0f172a",
     paddingVertical: 0,
   },

@@ -1,4 +1,3 @@
-
 import React, { useState } from "react";
 import {
   View,
@@ -29,39 +28,27 @@ export default function WarehousingScanningScreen({ navigation }: any) {
 
   const handleScan = () => {
     if (!barcode) return;
-    
-    // Simulating professional data fetch
-    setRow({
-      Boxcode: "C4554402",
-      Model: "SKU-4402",
-      Color: "Red",
-      Qty: "48",
-    });
+
+    setRow({ Boxcode: "C4554402",     Model: "SKU-4402",Color: "Red", Qty: "48",} ,);
 
     setPallet("PLT-77291");
     setQty("48");
   };
 
-  const tableHeaders = [
-    "Boxcode",
-    "Model",
-    "Color",
-    "Qty",
-  ];
+  const tableHeaders = ["Boxcode", "Model", "Color", "Qty"];
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="light-content" backgroundColor="#1E1B4B" />
-      
+
       {/* HEADER */}
       <View style={styles.header}>
         <View>
           <Text style={styles.headerTitle}>Warehouse Scanning</Text>
         </View>
-       
       </View>
 
-      <ScrollView 
+      <ScrollView
         contentContainerStyle={styles.scrollContainer}
         showsVerticalScrollIndicator={false}
       >
@@ -70,7 +57,7 @@ export default function WarehousingScanningScreen({ navigation }: any) {
           <View style={styles.cardHeader}>
             <Text style={styles.cardTitle}>Entry Scanner</Text>
           </View>
-          
+
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Scan Barcode</Text>
             <View style={styles.inputWrapper}>
@@ -113,7 +100,8 @@ export default function WarehousingScanningScreen({ navigation }: any) {
           <View style={styles.cardHeader}>
             <Text style={styles.cardTitle}>Recent Scan Details</Text>
           </View>
-          
+
+          {/* Scroll horizontal pour colonnes */}
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             <View>
               {/* Table Header */}
@@ -125,26 +113,32 @@ export default function WarehousingScanningScreen({ navigation }: any) {
                 ))}
               </View>
 
-              {/* Table Data */}
-              <View style={styles.dataRow}>
+              {/* Scroll vertical pour lignes */}
+              <ScrollView
+                style={{ maxHeight: 180 }}
+                showsVerticalScrollIndicator={true}
+              >
                 {row ? (
-                  Object.values(row).map((v, i) => (
-                    <Text key={i} style={[
-                      styles.cell, 
-                      i === 8 ? styles.statusCell : null
-                    ]}>
-                      {String(v)}
-                    </Text>
-                  ))
+                  <View style={styles.dataRow}>
+                    {Object.values(row).map((v, i) => (
+                      <Text key={i} style={styles.cell}>
+                        {String(v)}
+                      </Text>
+                    ))}
+                  </View>
                 ) : (
-                  tableHeaders.map((_, i) => (
-                    <Text key={i} style={styles.cell}>—</Text>
-                  ))
+                  <View style={styles.dataRow}>
+                    {tableHeaders.map((_, i) => (
+                      <Text key={i} style={styles.cell}>
+                        —
+                      </Text>
+                    ))}
+                  </View>
                 )}
-              </View>
+              </ScrollView>
             </View>
           </ScrollView>
-          
+
           {!row && (
             <View style={styles.emptyState}>
               <Text style={styles.emptyStateText}>Waiting for scan...</Text>
@@ -154,10 +148,10 @@ export default function WarehousingScanningScreen({ navigation }: any) {
 
         {/* FOOTER ACTIONS */}
         <View style={styles.buttonRow}>
-          <TouchableOpacity 
+          <TouchableOpacity
             activeOpacity={0.8}
             style={[styles.button, styles.primaryButton]}
-            onPress={() => navigation.navigate('ConfirmBox')}
+            onPress={() => navigation.navigate("ConfirmBox")}
           >
             <Text style={styles.buttonText}>View Details</Text>
           </TouchableOpacity>
@@ -189,46 +183,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 20,
     paddingBottom: 24,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     borderBottomLeftRadius: 24,
     borderBottomRightRadius: 24,
-  },
-  headerSubtitle: {
-    color: "#818CF8",
-    fontSize: 12,
-    fontWeight: "700",
-    textTransform: "uppercase",
-    letterSpacing: 1,
   },
   headerTitle: {
     color: "#FFFFFF",
     fontSize: 22,
     fontWeight: "800",
-  },
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(52, 211, 153, 0.1)',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(52, 211, 153, 0.2)',
-  },
-  statusDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#10B981',
-    marginRight: 6,
-  },
-  statusText: {
-    color: '#34D399',
-    fontSize: 10,
-    fontWeight: '700',
-    textTransform: 'uppercase',
   },
   card: {
     backgroundColor: "#FFFFFF",
@@ -245,7 +209,7 @@ const styles = StyleSheet.create({
   cardHeader: {
     marginBottom: 16,
     borderLeftWidth: 3,
-    borderLeftColor: '#4F46E5',
+    borderLeftColor: "#4F46E5",
     paddingLeft: 10,
   },
   cardTitle: {
@@ -266,8 +230,8 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   inputWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
   },
   input: {
     flex: 1,
@@ -279,18 +243,6 @@ const styles = StyleSheet.create({
     color: "#1E293B",
     borderWidth: 1,
     borderColor: "#E2E8F0",
-  },
-  scanInnerButton: {
-    backgroundColor: "#4F46E5",
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderRadius: 12,
-    marginLeft: 8,
-  },
-  scanInnerButtonText: {
-    color: "#FFFFFF",
-    fontSize: 12,
-    fontWeight: "800",
   },
   rowInputs: {
     flexDirection: "row",
@@ -310,7 +262,7 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 3,
     marginBottom: 20,
-    height:300,
+    height: 300,
   },
   headerRow: {
     flexDirection: "row",
@@ -340,18 +292,14 @@ const styles = StyleSheet.create({
     color: "#334155",
     fontWeight: "500",
   },
-  statusCell: {
-    color: "#059669",
-    fontWeight: "800",
-  },
   emptyState: {
     padding: 30,
-    alignItems: 'center',
+    alignItems: "center",
   },
   emptyStateText: {
     color: "#94A3B8",
     fontSize: 13,
-    fontStyle: 'italic',
+    fontStyle: "italic",
   },
   buttonRow: {
     flexDirection: "row",
@@ -363,20 +311,16 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: "center",
     marginHorizontal: 6,
-    shadowColor: "#4F46E5",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 8,
     elevation: 4,
   },
   primaryButton: {
-    backgroundColor: '#2563eb',
-    shadowColor: '#2563eb',
+    backgroundColor: "#2563eb",
   },
   secondaryButton: {
     backgroundColor: "#FEE2E2",
-    shadowColor: "#EF4444",
-    shadowOpacity: 0.1,
     borderWidth: 1,
     borderColor: "#FECACA",
   },
