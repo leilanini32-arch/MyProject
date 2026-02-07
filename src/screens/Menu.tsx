@@ -44,12 +44,28 @@ export default function Menu({ navigation }: any) {
     }
   };
 
-  const handleLogout = () => {
-    navigation.reset({
-      index: 0,
-      routes: [{ name: "Login" }],
-    });
-  };
+ const handleLogout = () => {
+  Alert.alert(
+    "Déconnexion",
+    "Voulez-vous vraiment quitter ?",
+    [
+      {
+        text: "Cancel",
+        style: "cancel"
+      },
+      {
+        text: "Exit",
+        style: "destructive",
+        onPress: () => {
+          navigation.reset({
+            index: 0,
+            routes: [{ name: "Login" }],
+          });
+        }
+      }
+    ]
+  );
+};
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -142,11 +158,11 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     color: "#FFFFFF",
-    fontSize: 26,
+    fontSize: 23,
     fontWeight: "900",
   },
   logoutButton: {
-    width: 70,
+    width: 75,
     height: 40,
     borderRadius: 22,
     backgroundColor: "rgba(255,255,255,0.15)",

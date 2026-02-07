@@ -63,10 +63,8 @@ export default function WarehousingScanningScreen({ navigation }: any) {
         </View>
       </View>
 
-      <ScrollView
-        contentContainerStyle={styles.scrollContainer}
-        showsVerticalScrollIndicator={false}
-      >
+      {/* Container principal sans ScrollView global */}
+      <View style={styles.container}>
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Text style={styles.cardTitle}>Entry Scanner</Text>
@@ -173,19 +171,18 @@ export default function WarehousingScanningScreen({ navigation }: any) {
             <Text style={styles.secondaryButtonText}>Exit</Text>
           </TouchableOpacity>
         </View>
-      </ScrollView>
+      </View>
     </SafeAreaView>
   );
 }
-
-
 
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: "#F8FAFC",
   },
-  scrollContainer: {
+  container: {
+    flex: 1,
     padding: 16,
     paddingBottom: 40,
   },
