@@ -8,11 +8,8 @@ import {
   StyleSheet,
   SafeAreaView,
   StatusBar,
-  Dimensions,
 } from "react-native";
-import { useFocusEffect } from "@react-navigation/native"; // <-- import pour réinitialiser
-
-const { width } = Dimensions.get("window");
+import { useFocusEffect } from "@react-navigation/native";
 
 type RowType = {
   Boxcode: string;
@@ -21,13 +18,13 @@ type RowType = {
   Qty: string;
 };
 
-export default function WarehousingScanningScreen({ navigation }: any) {
+export default function Scan({ navigation }: any) {
   const [barcode, setBarcode] = useState("");
   const [pallet, setPallet] = useState("");
   const [qty, setQty] = useState("");
   const [row, setRow] = useState<RowType | null>(null);
 
-  // 🔹 Réinitialisation automatique quand l'écran devient actif
+  // Réinitialisation automatique quand l'écran devient actif
   useFocusEffect(
     useCallback(() => {
       setBarcode("");
@@ -38,15 +35,16 @@ export default function WarehousingScanningScreen({ navigation }: any) {
   );
 
   const handleScan = () => {
-    if (!barcode) return;
+    if (!barcode.trim()) return;
 
-    setRow({
+    const mockRow = {
       Boxcode: "C4554402",
       Model: "SKU-4402",
       Color: "Red",
       Qty: "48",
-    });
+    };
 
+    setRow(mockRow);
     setPallet("PLT-77291");
     setQty("48");
   };
@@ -57,14 +55,14 @@ export default function WarehousingScanningScreen({ navigation }: any) {
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="light-content" backgroundColor="#1E1B4B" />
 
+      {/* Header */}
       <View style={styles.header}>
-        <View>
-          <Text style={styles.headerTitle}>Warehouse Scanning</Text>
-        </View>
+        <Text style={styles.headerTitle}>Warehouse Scanning</Text>
+      
       </View>
 
-      {/* Container principal sans ScrollView global */}
-      <View style={styles.container}>
+      <ScrollView contentContainerStyle={styles.container}>
+        {/* Entry Card */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Text style={styles.cardTitle}>Entry Scanner</Text>
@@ -72,34 +70,34 @@ export default function WarehousingScanningScreen({ navigation }: any) {
 
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Scan Barcode</Text>
-            <View style={styles.inputWrapper}>
-              <TextInput
-                style={styles.input}
-                placeholder="Scan or enter barcode"
-                placeholderTextColor="#94A3B8"
-                value={barcode}
-                onChangeText={setBarcode}
-                onSubmitEditing={handleScan}
-              />
-            </View>
+            <TextInput
+              style={styles.input}
+              placeholder="Scan or enter barcode"
+              placeholderTextColor="#94A3B8"
+              value={barcode}
+              onChangeText={setBarcode}
+              onSubmitEditing={handleScan}
+            />
           </View>
 
           <View style={styles.rowInputs}>
-            <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
+            <View style={[styles.inputGroup, { flex: 1, marginRight: 10 }]}>
               <Text style={styles.label}>Pallet ID</Text>
               <TextInput
-                style={[styles.input, styles.disabledInput]}
+                style={[styles.input, styles.filledInput]}
                 placeholder="—"
+                placeholderTextColor="#94A3B8"
                 value={pallet}
-                editable={false}
+                editable={true}
               />
             </View>
 
-            <View style={[styles.inputGroup, { flex: 0.6 }]}>
+            <View style={[styles.inputGroup, { width: 100 }]}>
               <Text style={styles.label}>Quantity</Text>
               <TextInput
-                style={[styles.input, styles.disabledInput]}
+                style={[styles.input, styles.filledInput]}
                 placeholder="0"
+                placeholderTextColor="#94A3B8"
                 value={qty}
                 editable={false}
               />
@@ -107,35 +105,33 @@ export default function WarehousingScanningScreen({ navigation }: any) {
           </View>
         </View>
 
-        <View style={styles.tableCard}>
+        {/* Details Card */}
+        <View style={[styles.card, { minHeight: 300 }]}>
           <View style={styles.cardHeader}>
             <Text style={styles.cardTitle}>Recent Scan Details</Text>
           </View>
 
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={true}>
             <View>
-              <View style={styles.headerRow}>
+              <View style={styles.tableHeaderRow}>
                 {tableHeaders.map((h) => (
                   <Text key={h} style={styles.headerCell}>
-                    {h.toUpperCase()}
+                    {h}
                   </Text>
                 ))}
               </View>
 
-              <ScrollView
-                style={{ maxHeight: 180 }}
-                showsVerticalScrollIndicator={true}
-              >
+              <ScrollView style={{ maxHeight: 180 }} showsVerticalScrollIndicator>
                 {row ? (
-                  <View style={styles.dataRow}>
+                  <View style={styles.tableDataRow}>
                     {Object.values(row).map((v, i) => (
                       <Text key={i} style={styles.cell}>
-                        {String(v)}
+                        {v}
                       </Text>
                     ))}
                   </View>
                 ) : (
-                  <View style={styles.dataRow}>
+                  <View style={styles.tableDataRow}>
                     {tableHeaders.map((_, i) => (
                       <Text key={i} style={styles.cell}>
                         —
@@ -148,198 +144,86 @@ export default function WarehousingScanningScreen({ navigation }: any) {
           </ScrollView>
 
           {!row && (
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyStateText}>Waiting for scan...</Text>
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>Waiting for input...</Text>
             </View>
           )}
         </View>
 
-        <View style={styles.buttonRow}>
+        {/* Actions */}
+        <View style={styles.actionContainer}>
           <TouchableOpacity
-            activeOpacity={0.8}
-            style={[styles.button, styles.primaryButton]}
+            style={[styles.btn, styles.btnPrimary]}
             onPress={() => navigation.navigate("ConfirmBox")}
           >
-            <Text style={styles.buttonText}>View Details</Text>
+            <Text style={styles.btnText}>View Details</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            activeOpacity={0.8}
-            style={[styles.button, styles.secondaryButton]}
+            style={[styles.btn, styles.btnSecondary]}
             onPress={() => navigation.goBack()}
           >
-            <Text style={styles.secondaryButtonText}>Exit</Text>
+            <Text style={styles.btnTextSecondary}>Exist</Text>
           </TouchableOpacity>
         </View>
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: "#F8FAFC",
-  },
-  container: {
-    flex: 1,
-    padding: 16,
-    paddingBottom: 40,
-  },
+  safeArea: { flex: 1, backgroundColor: "#F8FAFC" },
+  container: { padding: 16, paddingBottom: 40 },
   header: {
     backgroundColor: "#1E1B4B",
+    paddingTop: 40,
+    paddingBottom: 30,
     paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 24,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
   },
-  headerTitle: {
-    color: "#FFFFFF",
-    fontSize: 22,
-    fontWeight: "800",
-  },
+  headerTitle: { color: "#FFFFFF", fontSize: 22, fontWeight: "800" },
+  headerSubtitle: { color: "#A5B4FC", fontSize: 12, fontWeight: "600", marginTop: 4 },
   card: {
     backgroundColor: "#FFFFFF",
-    borderRadius: 20,
+    borderRadius: 16,
     padding: 20,
     marginBottom: 16,
-    marginTop: -12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    elevation: 3,
-  },
-  cardHeader: {
-    marginBottom: 16,
-    borderLeftWidth: 3,
-    borderLeftColor: "#4F46E5",
-    paddingLeft: 10,
-  },
-  cardTitle: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: "#475569",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-  },
-  inputGroup: {
-    marginBottom: 16,
-  },
-  label: {
-    color: "#64748B",
-    fontSize: 12,
-    fontWeight: "700",
-    marginBottom: 6,
-    marginLeft: 4,
-  },
-  inputWrapper: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  input: {
-    flex: 1,
-    backgroundColor: "#F1F5F9",
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 25,
-    color: "#1E293B",
     borderWidth: 1,
     borderColor: "#E2E8F0",
-  },
-  rowInputs: {
-    flexDirection: "row",
-  },
-  disabledInput: {
-    backgroundColor: "#F8FAFC",
-    color: "#94A3B8",
-    borderColor: "#F1F5F9",
-  },
-  tableCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 20,
-    padding: 16,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
-    shadowRadius: 10,
-    elevation: 3,
-    marginBottom: 10,
-    height: 360,
+    shadowRadius: 5,
+    elevation: 2,
   },
-  headerRow: {
-    flexDirection: "row",
+  cardHeader: { borderLeftWidth: 4, borderLeftColor: "#4F46E5", paddingLeft: 10, marginBottom: 20 },
+  cardTitle: { fontSize: 14, fontWeight: "800", color: "#475569", textTransform: "uppercase" },
+  inputGroup: { marginBottom: 15 },
+  label: { fontSize: 12, fontWeight: "700", color: "#64748B", marginBottom: 6, marginLeft: 2 },
+  input: {
+    height: 50,
     backgroundColor: "#F1F5F9",
-    borderRadius: 8,
-    paddingVertical: 10,
-  },
-  headerCell: {
-    width: 100,
-    paddingHorizontal: 12,
-    color: "#64748B",
-    fontWeight: "800",
-    fontSize: 10,
-    textAlign: "left",
-  },
-  dataRow: {
-    flexDirection: "row",
-    borderBottomWidth: 1,
-    borderColor: "#F1F5F9",
-    height: 40,
-  },
-  cell: {
-    width: 100,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    fontSize: 11,
-    color: "#334155",
-    fontWeight: "500",
-  },
-  emptyState: {
-    padding: 30,
-    alignItems: "center",
-  },
-  emptyStateText: {
-    color: "#94A3B8",
-    fontSize: 13,
-    fontStyle: "italic",
-  },
-  buttonRow: {
-    flexDirection: "row",
-    marginTop: 8,
-  },
-  button: {
-    flex: 1,
-    paddingVertical: 18,
-    borderRadius: 16,
-    alignItems: "center",
-    marginHorizontal: 6,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  primaryButton: {
-    backgroundColor: "#2563eb",
-  },
-  secondaryButton: {
-    backgroundColor: "#FEE2E2",
+    borderRadius: 10,
+    paddingHorizontal: 15,
+    fontSize: 14,
+    color: "#000000",
     borderWidth: 1,
-    borderColor: "#FECACA",
+    borderColor: "#CBD5E1",
+    outlineStyle: "none" as any,
   },
-  buttonText: {
-    color: "#FFFFFF",
-    fontWeight: "800",
-    fontSize: 16,
-  },
-  secondaryButtonText: {
-    color: "#EF4444",
-    fontWeight: "800",
-    fontSize: 16,
-  },
+  filledInput: { backgroundColor: "#FFFFFF", borderColor: "#4F46E5", fontWeight: "700" },
+  rowInputs: { flexDirection: "row", alignItems: "flex-end" },
+  tableHeaderRow: { flexDirection: "row", backgroundColor: "#F1F5F9", borderRadius: 8, paddingVertical: 10 },
+  headerCell: { width: 100, textAlign: "center", fontSize: 10, fontWeight: "800", color: "#64748B", textTransform: "uppercase" },
+  tableDataRow: { flexDirection: "row", borderBottomWidth: 1, borderBottomColor: "#F1F5F9" },
+  cell: { width: 100, textAlign: "center", paddingVertical: 15, fontSize: 12, color: "#334155", fontWeight: "600" },
+  emptyContainer: { flex: 1, justifyContent: "center", alignItems: "center", paddingTop: 40 },
+  emptyText: { color: "#94A3B8", fontStyle: "italic", fontSize: 13 },
+  actionContainer: { flexDirection: "row", gap: 12, marginTop: 10 },
+  btn: { flex: 1, height: 55, borderRadius: 14, justifyContent: "center", alignItems: "center", elevation: 3 },
+  btnPrimary: { backgroundColor: "#2563EB" },
+  btnSecondary: { backgroundColor: "#FEE2E2", borderWidth: 1, borderColor: "#FECACA" },
+  btnText: { color: "#FFFFFF", fontWeight: "800", fontSize: 16 },
+  btnTextSecondary: { color: "#EF4444", fontWeight: "800", fontSize: 16 },
 });
