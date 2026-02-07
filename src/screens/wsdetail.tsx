@@ -217,7 +217,7 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
     backgroundColor: "#FEE2E2",
-    marginBottom :10,
+    marginBottom :20,
   },
   secondaryButtonText: {
     color: "#EF4444",

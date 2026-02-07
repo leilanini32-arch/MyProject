@@ -1,4 +1,3 @@
-
 import React from "react";
 import {
   View,
@@ -11,6 +10,7 @@ import {
   Dimensions,
   Alert,
 } from "react-native";
+import MaterialIcons from "react-native-vector-icons/MaterialIcons";
 
 const { width } = Dimensions.get("window");
 
@@ -34,14 +34,14 @@ const menuItems = [
 export default function Menu({ navigation }: any) {
   const handleNavigation = (item: any) => {
     if (item.screen) {
-      // In a real navigation setup, this would use navigation.navigate(item.screen)
-      if (navigation && navigation.navigate) {
-        navigation.navigate(item.screen);
-      } else {
-        Alert.alert("Navigation", `Opening ${item.title.replace('\n', ' ')}`);
-      }
+      navigation?.navigate
+        ? navigation.navigate(item.screen)
+        : Alert.alert("Navigation", item.title);
     } else {
-      Alert.alert("Restricted Access", "This module is currently undergoing maintenance.");
+      Alert.alert(
+        "Restricted Access",
+        "This module is currently undergoing maintenance."
+      );
     }
   };
 
@@ -51,11 +51,12 @@ export default function Menu({ navigation }: any) {
       "Are you sure you want to terminate the current session?",
       [
         { text: "Cancel", style: "cancel" },
-        { 
-          text: "Exit", 
-          style: "destructive", 
-          onPress: () => navigation?.goBack ? navigation.goBack() : null 
-        }
+        {
+          text: "Exit",
+          style: "destructive",
+          onPress: () =>
+            navigation?.goBack ? navigation.goBack() : null,
+        },
       ]
     );
   };
@@ -63,15 +64,22 @@ export default function Menu({ navigation }: any) {
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="light-content" backgroundColor="#1E1B4B" />
-      
-      {/* ENTERPRISE HEADER */}
+
+      {/* HEADER */}
       <View style={styles.header}>
-        <View>
-          <Text style={styles.headerTitle}>Warehouse Management</Text>
-        </View>
+        <Text style={styles.headerTitle}>Warehouse Management</Text>
+
+        {/* LOGOUT BUTTON */}
+        <TouchableOpacity
+          style={styles.logoutButton}
+          onPress={handleExit}
+          activeOpacity={0.8}
+        >
+             <Text style={styles.logoutLabel}>LOGOUT</Text>
+        </TouchableOpacity>
       </View>
 
-      <ScrollView 
+      <ScrollView
         contentContainerStyle={styles.scrollContainer}
         showsVerticalScrollIndicator={false}
       >
@@ -94,27 +102,39 @@ export default function Menu({ navigation }: any) {
                 disabled={!isEnabled}
                 onPress={() => handleNavigation(item)}
               >
-                <View style={[styles.iconBox, !isEnabled && styles.disabledIconBox]}>
+                <View
+                  style={[
+                    styles.iconBox,
+                    !isEnabled && styles.disabledIconBox,
+                  ]}
+                >
                   <Text style={styles.icon}>{item.icon}</Text>
                 </View>
-                <Text style={[styles.cardText, !isEnabled && styles.disabledText]}>
+
+                <Text
+                  style={[
+                    styles.cardText,
+                    !isEnabled && styles.disabledText,
+                  ]}
+                >
                   {item.title}
                 </Text>
+
                 {isEnabled && <View style={styles.activeDot} />}
               </TouchableOpacity>
             );
           })}
         </View>
 
-        {/* LOGOUT / EXIT ACTION */}
-        <TouchableOpacity 
+        {/* FOOTER LOGOUT */}
+        <TouchableOpacity
           style={styles.exitButton}
           activeOpacity={0.8}
           onPress={handleExit}
         >
           <Text style={styles.exitText}>TERMINATE SESSION</Text>
         </TouchableOpacity>
-        
+
         <View style={styles.footerInfo}>
           <Text style={styles.footerText}>Authorized Personal Only</Text>
           <Text style={styles.footerText}>Secure Connection Active</Text>
@@ -134,65 +154,42 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 24,
     paddingBottom: 32,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     borderBottomLeftRadius: 32,
     borderBottomRightRadius: 32,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.15,
-    shadowRadius: 15,
     elevation: 8,
-  },
-  headerSubtitle: {
-    color: "#818CF8",
-    fontSize: 10,
-    fontWeight: "900",
-    textTransform: "uppercase",
-    letterSpacing: 2,
-    marginBottom: 2,
   },
   headerTitle: {
     color: "#FFFFFF",
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: "900",
-    letterSpacing: -0.5,
   },
-  userBadge: {
-    padding: 2,
-    borderRadius: 25,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-  },
-  avatar: {
-    width: 44,
-    height: 44,
+  logoutButton: {
+    width: 70,
+    height: 40,
     borderRadius: 22,
-    backgroundColor: "#4F46E5",
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.3)',
-  },
-  avatarText: {
-    color: '#FFF',
-    fontWeight: '800',
-    fontSize: 16,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.25)",
+    marginLeft: 20,
   },
   scrollContainer: {
     padding: 20,
     paddingBottom: 40,
   },
   sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     marginBottom: 24,
-    marginTop: 10,
   },
   sectionIndicator: {
     width: 4,
     height: 16,
-    backgroundColor: '#4F46E5',
+    backgroundColor: "#4F46E5",
     borderRadius: 2,
     marginRight: 10,
   },
@@ -201,7 +198,6 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: "#64748B",
     textTransform: "uppercase",
-    letterSpacing: 1.5,
   },
   grid: {
     flexDirection: "row",
@@ -213,35 +209,22 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     borderRadius: 28,
     paddingVertical: 24,
-    paddingHorizontal: 16,
     marginBottom: 16,
     alignItems: "center",
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: "#F1F5F9",
-    shadowColor: "#0F172A",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.05,
-    shadowRadius: 12,
-    elevation: 3,
   },
   disabledCard: {
-    backgroundColor: "#F8FAFC",
-    borderColor: "#F1F5F9",
-    elevation: 0,
-    shadowOpacity: 0,
+    opacity: 0.5,
   },
   iconBox: {
     width: 60,
     height: 60,
     borderRadius: 20,
     backgroundColor: "#F1F5F9",
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     marginBottom: 14,
   },
   disabledIconBox: {
-    backgroundColor: "transparent",
     opacity: 0.3,
   },
   icon: {
@@ -251,22 +234,18 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700",
     textAlign: "center",
-    color: "#1E293B",
-    lineHeight: 18,
   },
   disabledText: {
     color: "#94A3B8",
-    fontWeight: "600",
   },
   activeDot: {
-    position: 'absolute',
+    position: "absolute",
     top: 14,
     right: 14,
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: '#4F46E5',
-    opacity: 0.8,
+    backgroundColor: "#4F46E5",
   },
   exitButton: {
     backgroundColor: "#FFFFFF",
@@ -276,28 +255,24 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderWidth: 1.5,
     borderColor: "#FEE2E2",
-    shadowColor: "#EF4444",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 2,
   },
   exitText: {
     color: "#EF4444",
     fontSize: 13,
     fontWeight: "900",
-    letterSpacing: 1.2,
   },
   footerInfo: {
     marginTop: 32,
-    alignItems: 'center',
+    alignItems: "center",
   },
   footerText: {
-    color: '#94A3B8',
+    color: "#94A3B8",
     fontSize: 10,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    lineHeight: 18,
-  }
+  },
+  logoutLabel: {
+  color: '#FFFFFF',
+  fontSize: 12,
+  fontWeight: '900',
+  letterSpacing: 1,
+},
 });
