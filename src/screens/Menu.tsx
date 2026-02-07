@@ -10,7 +10,6 @@ import {
   Dimensions,
   Alert,
 } from "react-native";
-import MaterialIcons from "react-native-vector-icons/MaterialIcons";
 
 const { width } = Dimensions.get("window");
 
@@ -45,37 +44,26 @@ export default function Menu({ navigation }: any) {
     }
   };
 
-  const handleExit = () => {
-    Alert.alert(
-      "Confirm Exit",
-      "Are you sure you want to terminate the current session?",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Exit",
-          style: "destructive",
-          onPress: () =>
-            navigation?.goBack ? navigation.goBack() : null,
-        },
-      ]
-    );
+  const handleLogout = () => {
+    navigation.reset({
+      index: 0,
+      routes: [{ name: "Login" }],
+    });
   };
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="light-content" backgroundColor="#1E1B4B" />
 
-      {/* HEADER */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Warehouse Management</Text>
 
-        {/* LOGOUT BUTTON */}
         <TouchableOpacity
           style={styles.logoutButton}
-          onPress={handleExit}
+          onPress={handleLogout}
           activeOpacity={0.8}
         >
-             <Text style={styles.logoutLabel}>LOGOUT</Text>
+          <Text style={styles.logoutLabel}>LOGOUT</Text>
         </TouchableOpacity>
       </View>
 
@@ -94,28 +82,19 @@ export default function Menu({ navigation }: any) {
             return (
               <TouchableOpacity
                 key={index}
-                style={[
-                  styles.card,
-                  !isEnabled && styles.disabledCard,
-                ]}
+                style={[styles.card, !isEnabled && styles.disabledCard]}
                 activeOpacity={0.7}
                 disabled={!isEnabled}
                 onPress={() => handleNavigation(item)}
               >
                 <View
-                  style={[
-                    styles.iconBox,
-                    !isEnabled && styles.disabledIconBox,
-                  ]}
+                  style={[styles.iconBox, !isEnabled && styles.disabledIconBox]}
                 >
                   <Text style={styles.icon}>{item.icon}</Text>
                 </View>
 
                 <Text
-                  style={[
-                    styles.cardText,
-                    !isEnabled && styles.disabledText,
-                  ]}
+                  style={[styles.cardText, !isEnabled && styles.disabledText]}
                 >
                   {item.title}
                 </Text>
@@ -126,11 +105,10 @@ export default function Menu({ navigation }: any) {
           })}
         </View>
 
-        {/* FOOTER LOGOUT */}
         <TouchableOpacity
           style={styles.exitButton}
           activeOpacity={0.8}
-          onPress={handleExit}
+          onPress={handleLogout}
         >
           <Text style={styles.exitText}>TERMINATE SESSION</Text>
         </TouchableOpacity>
@@ -143,6 +121,7 @@ export default function Menu({ navigation }: any) {
     </SafeAreaView>
   );
 }
+
 
 const styles = StyleSheet.create({
   safeArea: {

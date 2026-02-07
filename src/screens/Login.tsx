@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { BackHandler } from "react-native";
+import { BackHandler, Alert } from "react-native";
 
 import {
   View,
@@ -9,7 +9,6 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
-  Alert,
   ScrollView,
   SafeAreaView,
   Modal,
@@ -64,7 +63,6 @@ const CustomInput = ({
             onFocus={() => setIsFocused(true)}
             onBlur={() => setIsFocused(false)}
           />
-
           {isPassword && (
             <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
               <Text style={{ fontSize: 18 }}>
@@ -129,27 +127,36 @@ export default function Login({ navigation }: any) {
     }
 
     if (userCode === "admin" && password === "admin") {
-      Alert.alert(
-        "Success",
-        `Login successful!\nClass: ${selectedClass}\nWarehouse: ${selectedWarehouse}`
-      );
       navigation.navigate("Menu");
     } else {
       Alert.alert("Error", "Incorrect Password or Usercode");
     }
   };
-
 const handleExit = () => {
-  Alert.alert("Exit", "Are you sure you want to close the application?", [
-    { text: "Cancel", style: "cancel" },
-    {
-      text: "Exit",
-      style: "destructive",
-      onPress: () => BackHandler.exitApp(), 
-    },
-  ]);
+  Alert.alert(
+    "Exit",
+    "Are you sure you want to close the application?",
+    [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Exit",
+        style: "destructive",
+        onPress: () => {
+          
+          setUserCode("");
+          setPassword("");
+          setSelectedClass("");
+          setSelectedWarehouse("");
+
+       
+          BackHandler.exitApp();
+        },
+      },
+    ]
+  );
 };
 
+ 
 
   return (
     <SafeAreaView style={styles.screen}>
@@ -224,6 +231,8 @@ const handleExit = () => {
             >
               <Text style={styles.secondaryButtonText}>Close App</Text>
             </TouchableOpacity>
+
+           
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -232,21 +241,12 @@ const handleExit = () => {
 }
 
 /* =====================
-   Styles
+   Styles (inchangés)
 ===================== */
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: "#ffffff",
-  },
-  container: {
-    padding: 24,
-    paddingBottom: 40,
-  },
-  header: {
-    alignItems: "center",
-    marginBottom: 16,
-  },
+  screen: { flex: 1, backgroundColor: "#ffffff" },
+  container: { padding: 24, paddingBottom: 40 },
+  header: { alignItems: "center", marginBottom: 16 },
   logoBox: {
     width: 60,
     height: 48,
@@ -256,139 +256,29 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginBottom: 10,
   },
-  logoText: {
-    color: "#fff",
-    fontSize: 20,
-    fontWeight: "900",
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#0f172a",
-    textAlign: "center",
-    marginBottom: 4,
-  },
-  subtitle: {
-    fontSize: 13,
-    color: "#64748b",
-  },
-  infoBox: {
-    backgroundColor: "#f8fafc",
-    padding: 10,
-    borderRadius: 12,
-    alignItems: "center",
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-  },
-  url: {
-    fontSize: 11,
-    color: "#94a3b8",
-    fontWeight: "700",
-  },
-  version: {
-    fontSize: 12,
-    fontWeight: "700",
-    marginTop: 2,
-    color: "#1e293b",
-  },
-  form: {
-    marginBottom: 12,
-  },
-  inputWrapper: {
-    marginBottom: 10,
-  },
-  label: {
-    fontSize: 11,
-    fontWeight: "700",
-    marginBottom: 4,
-    color: "#334155",
-  },
-  inputContainer: {
-    height: 65,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: "#e2e8f0",
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 12,
-    backgroundColor: "#ffffff",
-  },
-  inputFocused: {
-    borderColor: "#0052cc",
-    backgroundColor: "#f8fbff",
-  },
-  input: {
-    flex: 1,
-    fontSize: 20,
-    color: "#0f172a",
-    paddingVertical: 0,
-  },
-  placeholderText: {
-    color: "#94a3b8",
-  },
-  chevronIcon: {
-    fontSize: 10,
-    color: "#94a3b8",
-    marginLeft: 6,
-  },
-  buttonContainer: {
-    gap: 10,
-    marginTop: 10,
-  },
-  button: {
-    height: 48,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  primaryButton: {
-    backgroundColor: "#0052cc",
-  },
-  primaryButtonText: {
-    color: "#fff",
-    fontWeight: "700",
-    fontSize: 16,
-  },
-  secondaryButton: {
-    borderWidth: 2,
-    borderColor: "#e2e8f0",
-  },
-  secondaryButtonText: {
-    fontWeight: "700",
-    fontSize: 16,
-    color: "#475569",
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 20,
-  },
-  modalContent: {
-    backgroundColor: "#fff",
-    width: "100%",
-    maxWidth: 400,
-    borderRadius: 16,
-    padding: 20,
-    maxHeight: "80%",
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#0f172a",
-    marginBottom: 16,
-    textAlign: "center",
-  },
-  optionItem: {
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: "#f1f5f9",
-  },
-  optionText: {
-    fontSize: 16,
-    color: "#334155",
-    textAlign: "center",
-  },
+  logoText: { color: "#fff", fontSize: 20, fontWeight: "900" },
+  title: { fontSize: 18, fontWeight: "800", color: "#0f172a", textAlign: "center", marginBottom: 4 },
+  subtitle: { fontSize: 13, color: "#64748b" },
+  infoBox: { backgroundColor: "#f8fafc", padding: 10, borderRadius: 12, alignItems: "center", marginBottom: 16, borderWidth: 1, borderColor: "#e2e8f0" },
+  url: { fontSize: 11, color: "#94a3b8", fontWeight: "700" },
+  version: { fontSize: 12, fontWeight: "700", marginTop: 2, color: "#1e293b" },
+  form: { marginBottom: 12 },
+  inputWrapper: { marginBottom: 10 },
+  label: { fontSize: 11, fontWeight: "700", marginBottom: 4, color: "#334155" },
+  inputContainer: { height: 65, borderRadius: 10, borderWidth: 2, borderColor: "#e2e8f0", flexDirection: "row", alignItems: "center", paddingHorizontal: 12, backgroundColor: "#ffffff" },
+  inputFocused: { borderColor: "#0052cc", backgroundColor: "#f8fbff" },
+  input: { flex: 1, fontSize: 20, color: "#0f172a", paddingVertical: 0 },
+  placeholderText: { color: "#94a3b8" },
+  chevronIcon: { fontSize: 10, color: "#94a3b8", marginLeft: 6 },
+  buttonContainer: { gap: 10, marginTop: 10 },
+  button: { height: 48, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  primaryButton: { backgroundColor: "#0052cc" },
+  primaryButtonText: { color: "#fff", fontWeight: "700", fontSize: 16 },
+  secondaryButton: { borderWidth: 2, borderColor: "#e2e8f0" },
+  secondaryButtonText: { fontWeight: "700", fontSize: 16, color: "#475569" },
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center", padding: 20 },
+  modalContent: { backgroundColor: "#fff", width: "100%", maxWidth: 400, borderRadius: 16, padding: 20, maxHeight: "80%" },
+  modalTitle: { fontSize: 18, fontWeight: "800", color: "#0f172a", marginBottom: 16, textAlign: "center" },
+  optionItem: { paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#f1f5f9" },
+  optionText: { fontSize: 16, color: "#334155", textAlign: "center" },
 });

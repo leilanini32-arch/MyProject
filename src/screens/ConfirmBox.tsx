@@ -170,6 +170,8 @@ export default function WSCTableScreen({ navigation }: any) {
   );
 }
 
+
+
 // Styles restent les mêmes que ton code original
 
 

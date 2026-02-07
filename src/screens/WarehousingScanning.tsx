@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   StatusBar,
   Dimensions,
 } from "react-native";
+import { useFocusEffect } from "@react-navigation/native"; // <-- import pour réinitialiser
 
 const { width } = Dimensions.get("window");
 
@@ -26,10 +27,25 @@ export default function WarehousingScanningScreen({ navigation }: any) {
   const [qty, setQty] = useState("");
   const [row, setRow] = useState<RowType | null>(null);
 
+  // 🔹 Réinitialisation automatique quand l'écran devient actif
+  useFocusEffect(
+    useCallback(() => {
+      setBarcode("");
+      setPallet("");
+      setQty("");
+      setRow(null);
+    }, [])
+  );
+
   const handleScan = () => {
     if (!barcode) return;
 
-    setRow({ Boxcode: "C4554402",     Model: "SKU-4402",Color: "Red", Qty: "48",} ,);
+    setRow({
+      Boxcode: "C4554402",
+      Model: "SKU-4402",
+      Color: "Red",
+      Qty: "48",
+    });
 
     setPallet("PLT-77291");
     setQty("48");
@@ -41,7 +57,6 @@ export default function WarehousingScanningScreen({ navigation }: any) {
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="light-content" backgroundColor="#1E1B4B" />
 
-      {/* HEADER */}
       <View style={styles.header}>
         <View>
           <Text style={styles.headerTitle}>Warehouse Scanning</Text>
@@ -52,7 +67,6 @@ export default function WarehousingScanningScreen({ navigation }: any) {
         contentContainerStyle={styles.scrollContainer}
         showsVerticalScrollIndicator={false}
       >
-        {/* SCAN INPUT CARD */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Text style={styles.cardTitle}>Entry Scanner</Text>
@@ -95,16 +109,13 @@ export default function WarehousingScanningScreen({ navigation }: any) {
           </View>
         </View>
 
-        {/* DATA TABLE CARD */}
         <View style={styles.tableCard}>
           <View style={styles.cardHeader}>
             <Text style={styles.cardTitle}>Recent Scan Details</Text>
           </View>
 
-          {/* Scroll horizontal pour colonnes */}
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             <View>
-              {/* Table Header */}
               <View style={styles.headerRow}>
                 {tableHeaders.map((h) => (
                   <Text key={h} style={styles.headerCell}>
@@ -113,7 +124,6 @@ export default function WarehousingScanningScreen({ navigation }: any) {
                 ))}
               </View>
 
-              {/* Scroll vertical pour lignes */}
               <ScrollView
                 style={{ maxHeight: 180 }}
                 showsVerticalScrollIndicator={true}
@@ -146,7 +156,6 @@ export default function WarehousingScanningScreen({ navigation }: any) {
           )}
         </View>
 
-        {/* FOOTER ACTIONS */}
         <View style={styles.buttonRow}>
           <TouchableOpacity
             activeOpacity={0.8}
@@ -168,6 +177,8 @@ export default function WarehousingScanningScreen({ navigation }: any) {
     </SafeAreaView>
   );
 }
+
+
 
 const styles = StyleSheet.create({
   safeArea: {

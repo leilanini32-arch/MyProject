@@ -7,6 +7,7 @@ import {
   SafeAreaView,
   ListRenderItem,
   TouchableOpacity,
+  Dimensions,
 } from 'react-native';
 
 interface WSSNItem {
@@ -29,6 +30,7 @@ export default function WSSNTableScreen({ route, navigation }: WSSNTableProps) {
   };
 
   const totalSN = snItems.length;
+  const { height } = Dimensions.get('window');
 
   const renderItem: ListRenderItem<WSSNItem> = ({ item, index }) => (
     <View style={[styles.row, index % 2 === 0 ? styles.rowEven : styles.rowOdd]}>
@@ -80,6 +82,8 @@ export default function WSSNTableScreen({ route, navigation }: WSSNTableProps) {
           ListEmptyComponent={
             <Text style={styles.emptyText}>No SN data available.</Text>
           }
+          style={{ flex: 1 }}
+          showsVerticalScrollIndicator={true}
         />
       </View>
 
@@ -166,6 +170,7 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 10,
     borderBottomRightRadius: 10,
     elevation: 2,
+    paddingBottom: 10,
   },
 
   row: {
@@ -207,22 +212,21 @@ const styles = StyleSheet.create({
   },
   button: {
     width: '90%',
-    paddingVertical: 14, // hauteur confortable
+    paddingVertical: 14,
     borderRadius: 12,
     alignItems: 'center',
-    marginHorizontal: 20, // 100% width
+    marginHorizontal: 20,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 2,
     backgroundColor: "#FEE2E2",
-    marginBottom :20,
+    marginBottom: 20,
   },
   secondaryButtonText: {
     color: "#EF4444",
     fontWeight: "800",
     fontSize: 16,
   },
-
 });
