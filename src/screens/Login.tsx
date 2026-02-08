@@ -1,10 +1,9 @@
-import React, { useState } from "react";
-import { BackHandler, Alert } from "react-native";
+import React, { useState, useRef } from "react";
+import { BackHandler, Alert, TextInput } from "react-native";
 
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
   KeyboardAvoidingView,
@@ -26,6 +25,8 @@ const CustomInput = ({
   isPassword = false,
   onChangeText,
   options = [],
+  inputRef,
+  onSubmitEditing,
 }: any) => {
   const [showModal, setShowModal] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
@@ -54,6 +55,7 @@ const CustomInput = ({
       ) : (
         <View style={[styles.inputContainer, isFocused && styles.inputFocused]}>
           <TextInput
+            ref={inputRef}
             value={value}
             onChangeText={onChangeText}
             placeholder={placeholder}
@@ -62,6 +64,8 @@ const CustomInput = ({
             secureTextEntry={isPassword && !showPassword}
             onFocus={() => setIsFocused(true)}
             onBlur={() => setIsFocused(false)}
+            onSubmitEditing={onSubmitEditing}
+            blurOnSubmit={false}
           />
           {isPassword && (
             <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
@@ -111,7 +115,10 @@ export default function Login({ navigation }: any) {
   const [password, setPassword] = useState("");
   const [selectedWarehouse, setSelectedWarehouse] = useState("");
 
-  const classOptions = ["Day", "Night", "Afternoon", "Evening"];
+  const userRef = useRef<TextInput>(null);
+  const passwordRef = useRef<TextInput>(null);
+
+  const classOptions = ["Jour", "Nuit", "Ramadan"];
   const warehouseOptions = [
     "Main Logistics Center",
     "North Wing Hub",
@@ -120,43 +127,76 @@ export default function Login({ navigation }: any) {
     "Cold Storage Alpha",
   ];
 
-  const handleLogin = () => {
+  // ✅ Vérification UserCode avant password
+  const checkUserCode = async () => {
+    if (!userCode) return;
+
+    try {
+      const res = await fetch('http://10.164.222.93:3000/api/check-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userCode }),
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        // ✅ utilisateur existe → focus password
+        passwordRef.current?.focus();
+      } else {
+        Alert.alert('Error', data.message);
+        userRef.current?.focus();
+      }
+    } catch {
+      Alert.alert('Error', 'Server not reachable');
+    }
+  };
+
+  // ✅ Login complet
+  const handleLogin = async () => {
     if (!userCode || !password) {
       Alert.alert("Error", "Please enter your credentials");
       return;
     }
 
-    if (userCode === "admin" && password === "admin") {
+    try {
+      const res = await fetch('http://10.164.222.93:3000/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userCode, password }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) throw new Error(data.message);
+
+      Alert.alert('Success', `Welcome ${data.userName}`);
       navigation.navigate("Menu");
-    } else {
-      Alert.alert("Error", "Incorrect Password or Usercode");
+    } catch (err: any) {
+      Alert.alert("Error", err.message);
     }
   };
-const handleExit = () => {
-  Alert.alert(
-    "Exit",
-    "Are you sure you want to close the application?",
-    [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Exit",
-        style: "destructive",
-        onPress: () => {
-          
-          setUserCode("");
-          setPassword("");
-          setSelectedClass("");
-          setSelectedWarehouse("");
 
-       
-          BackHandler.exitApp();
+  const handleExit = () => {
+    Alert.alert(
+      "Exit",
+      "Are you sure you want to close the application?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Exit",
+          style: "destructive",
+          onPress: () => {
+            setUserCode("");
+            setPassword("");
+            setSelectedClass("");
+            setSelectedWarehouse("");
+            BackHandler.exitApp();
+          },
         },
-      },
-    ]
-  );
-};
-
- 
+      ]
+    );
+  };
 
   return (
     <SafeAreaView style={styles.screen}>
@@ -196,6 +236,8 @@ const handleExit = () => {
               placeholder="Enter your ID"
               value={userCode}
               onChangeText={setUserCode}
+              inputRef={userRef}
+              onSubmitEditing={checkUserCode} // ✅ ici
             />
 
             <CustomInput
@@ -204,6 +246,7 @@ const handleExit = () => {
               value={password}
               onChangeText={setPassword}
               isPassword
+              inputRef={passwordRef}
             />
 
             <CustomInput
@@ -231,14 +274,13 @@ const handleExit = () => {
             >
               <Text style={styles.secondaryButtonText}>Close App</Text>
             </TouchableOpacity>
-
-           
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
+
 
 /* =====================
    Styles (inchangés)

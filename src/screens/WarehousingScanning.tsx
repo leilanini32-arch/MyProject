@@ -145,7 +145,7 @@ export default function Scan({ navigation }: any) {
 
           {!row && (
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>Waiting for input...</Text>
+              <Text style={styles.emptyText}>Waiting for Scanning...</Text>
             </View>
           )}
         </View>
@@ -163,7 +163,7 @@ export default function Scan({ navigation }: any) {
             style={[styles.btn, styles.btnSecondary]}
             onPress={() => navigation.goBack()}
           >
-            <Text style={styles.btnTextSecondary}>Exist</Text>
+            <Text style={styles.btnTextSecondary}>Exit</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -206,7 +206,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#F1F5F9",
     borderRadius: 10,
     paddingHorizontal: 15,
-    fontSize: 14,
+    fontSize: 25,
     color: "#000000",
     borderWidth: 1,
     borderColor: "#CBD5E1",
