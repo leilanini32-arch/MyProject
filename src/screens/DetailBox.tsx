@@ -10,10 +10,6 @@ import {
   ListRenderItem,
 } from 'react-native';
 
-
-
-
-
 interface WSCItem {
   id: string;
   code: string;
@@ -23,19 +19,7 @@ interface WSCItem {
   snItems?: { id: string; sn: string; imei1: string; imei2: string }[];
 }
 
-interface ConfirmBoxProps {
-  navigation: any;
-  route: {
-    params: {
-      palletCode: string;
-      onConfirm: (confirmed: boolean) => void;
-    };
-  };
-}
-
-export default function WSCTableScreen({ navigation, route }: ConfirmBoxProps) {
-  const { palletCode, onConfirm } = route.params;
-
+export default function WSCTableScreen1({ navigation }: any) {
   const [items, setItems] = useState<WSCItem[]>([
     { 
       id: '1', code: 'BX-1001', qty: 5, model: 'Alpha', color: 'Red',
@@ -63,32 +47,7 @@ export default function WSCTableScreen({ navigation, route }: ConfirmBoxProps) {
     [items]
   );
 
-  const confirmBatch = (): void => {
-    if (items.length === 0) {
-      Alert.alert('System Info', 'No active scans found to confirm.');
-      return;
-    }
 
-    Alert.alert(
-      'Confirm Batch Processing',
-      `Review Summary:\n\nTotal Packages: ${items.length}\nTotal Units: ${totalQty}\n\nProceed with confirmation?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Confirm',
-          onPress: () => {
-            onConfirm(true);
-            navigation.goBack();
-            
-            //setItems([]);
-            //setSelectedItem(null);
-            
-            Alert.alert('Success', 'Batch processed and inventory updated.');
-          },
-        },
-      ]
-    );
-  };
 
   const showBarcodeDetails = (): void => {
     if (!selectedItem) {
@@ -124,7 +83,7 @@ export default function WSCTableScreen({ navigation, route }: ConfirmBoxProps) {
       <StatusBar barStyle="dark-content" />
 
       <View style={styles.header}>
-        <Text style={styles.title}>Warehousing Scanning Confirm</Text>
+        <Text style={styles.title}>Box Details</Text>
         <Text style={styles.subtitle}>Batch Confirmation Dashboard</Text>
       </View>
 
@@ -170,13 +129,7 @@ export default function WSCTableScreen({ navigation, route }: ConfirmBoxProps) {
             <Text style={styles.btnTextSecondary}>Barcode Detail</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.actionBtn, styles.btnPrimary]}
-            onPress={confirmBatch}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.btnTextPrimary}>Confirm</Text>
-          </TouchableOpacity>
+         
         </View>
 
         <TouchableOpacity

@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import {
   View,
   Text,
@@ -8,8 +8,10 @@ import {
   StyleSheet,
   SafeAreaView,
   StatusBar,
+  Alert,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
+import { useGlobal } from "./GlobalContext";
 
 type RowType = {
   Boxcode: string;
@@ -18,11 +20,25 @@ type RowType = {
   Qty: string;
 };
 
+const BASE_URL = "http://10.164.222.93:3000";
+
 export default function Scan({ navigation }: any) {
   const [barcode, setBarcode] = useState("");
   const [pallet, setPallet] = useState("");
   const [qty, setQty] = useState("");
   const [row, setRow] = useState<RowType | null>(null);
+
+
+  const { gs_factoryCode, setgs_factoryCode } = useGlobal();
+  const { gs_wareCode, setgs_wareCode } = useGlobal();
+  const { gs_wareName, setgs_wareName } = useGlobal();
+  const { gs_wareType, setgs_wareType } = useGlobal();
+  const { gs_classCode, setgs_classCode } = useGlobal();
+  const { gs_className, setgs_className } = useGlobal();
+  const { gs_workdate, setgs_workdate } = useGlobal();
+  const { gs_userCode, setgs_userCode } = useGlobal();
+  const { gs_userName, setgs_userName } = useGlobal();
+  const { gs_roleCode, setgs_roleCode } = useGlobal();
 
   // Réinitialisation automatique quand l'écran devient actif
   useFocusEffect(
@@ -34,20 +50,109 @@ export default function Scan({ navigation }: any) {
     }, [])
   );
 
-  const handleScan = () => {
+
+
+
+  const handleScan = async () => {
     if (!barcode.trim()) return;
 
-    const mockRow = {
-      Boxcode: "C4554402",
-      Model: "SKU-4402",
-      Color: "Red",
-      Qty: "48",
-    };
+    try {
+      // 1️⃣ Vérifier le code scanné
+      const resCheck = await fetch(`${BASE_URL}/api/InBarcodeCheck`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          factoryCode: gs_factoryCode,
+          scanCode: barcode.trim(),
+        }),
+      });
 
-    setRow(mockRow);
-    setPallet("PLT-77291");
-    setQty("48");
+      const dataCheck = await resCheck.json();
+
+      if (!resCheck.ok || !dataCheck.dt || dataCheck.dt.length === 0) {
+        Alert.alert("Error", "Data handling exceptions, please check!");
+        setBarcode("");
+        return;
+      }
+
+      const record = dataCheck.dt[0];
+      if (record.isok !== "1") {
+        Alert.alert("Error", record.retstr || "Invalid barcode!");
+        console.log(record.retstr);
+        setBarcode("");
+        return;
+      }
+
+      // ✅ Code valide, récupérer palletCode et scanType
+      const palletCode = record.palletCode;
+      const scanType = record.scanType;
+
+      // 2️⃣ Afficher ConfirmBox pour confirmation
+      navigation.navigate("ConfirmBox", {
+        palletCode,
+        onConfirm: async (confirmed: boolean) => {
+          if (!confirmed) {
+            // Annulé
+            setBarcode("");
+            setRow(null);
+            setQty("");
+            return;
+          }
+
+          // 3️⃣ Si confirmé → appeler InPalletInsert
+          const resInsert = await fetch(`${BASE_URL}/api/InPalletInsert`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              factoryCode: gs_factoryCode,
+              wareHouseCode: gs_wareCode,
+              scanType,
+              palletCode,
+              scanBarCode: barcode.trim(),
+              classesCode: gs_classCode,
+              groupCode: "GRP01",
+              workdate: gs_workdate,
+              createUser: gs_userCode,
+            }),
+          });
+
+          const dataInsert = await resInsert.json();
+
+          if (!resInsert.ok || !dataInsert.dt || dataInsert.dt.length === 0) {
+            Alert.alert("Error", "No product in the pallet!");
+            setBarcode("");
+            return;
+          }
+
+          const insertRecord = dataInsert.dt[0];
+          if (insertRecord.isok !== "1") {
+            Alert.alert("Error", insertRecord.retstr || "Insert failed!");
+            setBarcode("");
+            return;
+          }
+
+          // 4️⃣ Mettre à jour l'interface
+
+          console.log("datainsere"+insertRecord);
+
+          setRow({
+            Boxcode: insertRecord.scanBarcodeLarge,
+            Model: insertRecord.model,
+            Color: insertRecord.color,
+            Qty: insertRecord.totalQty,
+          });
+          setPallet(palletCode);
+          setQty(insertRecord.totalQty);
+          setBarcode("");
+        },
+      });
+    } catch (err) {
+      console.error(err);
+      Alert.alert("Error", "Cannot reach server or something went wrong!");
+      setBarcode("");
+    }
   };
+
 
   const tableHeaders = ["Boxcode", "Model", "Color", "Qty"];
 
@@ -58,7 +163,7 @@ export default function Scan({ navigation }: any) {
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Warehouse Scanning</Text>
-      
+
       </View>
 
       <ScrollView contentContainerStyle={styles.container}>
@@ -71,8 +176,13 @@ export default function Scan({ navigation }: any) {
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Scan Barcode</Text>
             <TextInput
-              style={styles.input}
+
               placeholder="Scan or enter barcode"
+              editable={gs_wareType === "MainWarehouse"}
+              style={[
+                styles.input,
+                gs_wareType !== "MainWarehouse" && { backgroundColor: '#eee' }
+              ]}
               placeholderTextColor="#94A3B8"
               value={barcode}
               onChangeText={setBarcode}
@@ -154,7 +264,7 @@ export default function Scan({ navigation }: any) {
         <View style={styles.actionContainer}>
           <TouchableOpacity
             style={[styles.btn, styles.btnPrimary]}
-            onPress={() => navigation.navigate("ConfirmBox")}
+            onPress={() => navigation.navigate("DetailBox")}
           >
             <Text style={styles.btnText}>View Details</Text>
           </TouchableOpacity>

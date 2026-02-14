@@ -21,6 +21,9 @@ import {
   Alert,
   TextInput,
 } from "react-native";
+import { useGlobal } from "./GlobalContext";
+
+const BASE_URL = "http://10.164.222.93:3000";
 
 /* =====================
    Types
@@ -28,6 +31,11 @@ import {
 type WarehouseItem = {
   wareHouseCode: string;
   wareHouseName: string;
+};
+
+type ClassItem = {
+  ClassCode: string;
+  ClassName: string;
 };
 
 type CustomInputRef = {
@@ -121,7 +129,7 @@ const CustomInput = forwardRef<CustomInputRef, any>(
                 <FlatList
                   data={options}
                   keyExtractor={(item: any) =>
-                    item.wareHouseCode ?? item
+                    item.ClassCode ?? item.wareHouseCode ?? item
                   }
                   renderItem={({ item }) => (
                     <TouchableOpacity
@@ -129,7 +137,7 @@ const CustomInput = forwardRef<CustomInputRef, any>(
                       onPress={() => handleSelect(item)}
                     >
                       <Text style={styles.optionText}>
-                        {item.wareHouseName ?? item}
+                        {item.ClassName ?? item.wareHouseName ?? item}
                       </Text>
                     </TouchableOpacity>
                   )}
@@ -154,11 +162,16 @@ const CustomInput = forwardRef<CustomInputRef, any>(
    Login Screen
 ===================== */
 export default function Login({ navigation }: any) {
-  const [selectedClass, setSelectedClass] = useState("");
-  const [classOptions, setClassOptions] = useState<string[]>([]);
   const [userCode, setUserCode] = useState("");
   const [password, setPassword] = useState("");
   const [serverPassword, setServerPassword] = useState("");
+
+  const [classOptions, setClassOptions] = useState<ClassItem[]>(
+    []
+  );
+
+  const [selectedClass, setSelectedClass] =
+    useState<ClassItem | null>(null);
 
   const [warehouseOptions, setWarehouseOptions] = useState<WarehouseItem[]>(
     []
@@ -169,6 +182,22 @@ export default function Login({ navigation }: any) {
   const userRef = useRef<TextInput>(null);
   const passwordRef = useRef<TextInput>(null);
   const warehouseRef = useRef<CustomInputRef>(null);
+  const classRef = useRef<CustomInputRef>(null);
+
+  const { gs_factoryCode, setgs_factoryCode } = useGlobal();
+  const { gs_wareCode, setgs_wareCode } = useGlobal();
+  const { gs_wareName, setgs_wareName } = useGlobal();
+  const { gs_wareType, setgs_wareType } = useGlobal();
+  const { gs_classCode, setgs_classCode } = useGlobal();
+  const { gs_className, setgs_className } = useGlobal();
+  const { gs_workdate, setgs_workdate } = useGlobal();
+  const { gs_userCode, setgs_userCode } = useGlobal();
+  const { gs_userName, setgs_userName } = useGlobal();
+  const { gs_roleCode, setgs_roleCode } = useGlobal();
+
+
+
+
 
   /* =====================
      Load Classes
@@ -176,16 +205,21 @@ export default function Login({ navigation }: any) {
   useEffect(() => {
     const loadClasses = async () => {
       try {
-        const res = await fetch(
-          "http://10.164.222.93:3000/api/getClassList",
+        const res = await fetch(`${BASE_URL}/api/getClassList`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ factoryCode: "001" }),
+            body: JSON.stringify({ gs_factoryCode }),
           }
         );
         const data = await res.json();
-        setClassOptions(data.dt.map((c: any) => c.classesName));
+        setClassOptions(
+          data.dt.map((c: any) => ({
+            ClassCode: c.classesCode,
+            ClassName: c.classesName,
+          }))
+        );
+
       } catch {
         Alert.alert("Error", "Unable to load classes");
       }
@@ -205,10 +239,10 @@ export default function Login({ navigation }: any) {
     }
 
     try {
-      const res = await fetch("http://10.164.222.93:3000/api/getUserInfo", {
+      const res = await fetch(`${BASE_URL}/api/getUserInfo`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ factoryCode: "001", userCode }),
+        body: JSON.stringify({ gs_factoryCode, userCode }),
       });
 
       const data = await res.json();
@@ -222,7 +256,7 @@ export default function Login({ navigation }: any) {
       }
 
       setServerPassword(data.dt[0].passwordInput);
-      Alert.alert(serverPassword);
+      console.log(serverPassword);
 
       passwordRef.current?.focus();
     } catch {
@@ -241,11 +275,11 @@ export default function Login({ navigation }: any) {
 
     try {
       const res = await fetch(
-        "http://10.164.222.93:3000/api/getAllWareHouses",
+        `${BASE_URL}/api/getAllWareHouses`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ factoryCode: "001", userCode }),
+          body: JSON.stringify({ gs_factoryCode, userCode }),
         }
       );
 
@@ -276,19 +310,25 @@ export default function Login({ navigation }: any) {
     const wareHouseCode = selectedWarehouse.wareHouseCode;
     const wareHouseName = selectedWarehouse.wareHouseName;
 
+    setgs_wareCode(wareHouseCode);
+    setgs_wareName(wareHouseName);
+
     console.log("WAREHOUSE:", wareHouseCode, wareHouseName);
+
+
+
 
     try {
       /* =========================
          1️⃣ GET WAREHOUSE INFO
       ========================= */
       const resWare = await fetch(
-        "http://10.164.222.93:3000/api/getWareInfo",
+        `${BASE_URL}/api/getWareInfo`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            factoryCode: "001",
+            gs_factoryCode,
             wareHouseCode,
           }),
         }
@@ -302,18 +342,19 @@ export default function Login({ navigation }: any) {
       }
 
       const wareHouseType = dataWare.dt[0].wareHouseType;
-      console.log("WAREHOUSE TYPE:", wareHouseType);
+      setgs_wareType(wareHouseType);
+      console.log("WAREHOUSE TYPE:", gs_wareType);
 
       /* =========================
          2️⃣ CHECK LICENSE
       ========================= */
       const resCheck = await fetch(
-        "http://10.164.222.93:3000/api/checkWarehouse",
+        `${BASE_URL}/api/checkWarehouse`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            factoryCode: "001",
+            gs_factoryCode,
             wareHouseCode,   // ✅ on envoie le résultat ici
           }),
         }
@@ -324,21 +365,21 @@ export default function Login({ navigation }: any) {
       if (!resCheck.ok) {
         Alert.alert("License Error", dataCheck.message);
         return;
-      }else{   Alert.alert("Ok",dataCheck.message);}
+      } else { Alert.alert("Ok", dataCheck.message); }
 
-    
-       
+
+
 
       /* =========================
          3️⃣ CHECK USER
       ========================= */
       const resUser = await fetch(
-        "http://10.164.222.93:3000/api/getUserInfo",
+        `${BASE_URL}/api/getUserInfo`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            factoryCode: "001",
+            gs_factoryCode,
             userCode,
           }),
         }
@@ -356,6 +397,51 @@ export default function Login({ navigation }: any) {
         passwordRef.current?.focus();
         return;
       }
+
+      setgs_userCode(userCode);
+      setgs_userName(dataUser.dt[0].userCode);
+      setgs_roleCode(dataUser.dt[0].frolecode);
+
+
+      /* =========================
+   4️⃣ GET WORKDATE
+========================= */
+
+      if (!selectedClass) {
+        Alert.alert("Error", "Select Class");
+        return;
+      }
+
+      const ClassCode = selectedClass.ClassCode;
+      const ClassName = selectedClass.ClassName;
+
+      setgs_classCode(ClassCode);
+      setgs_className(ClassName);
+
+
+      const resWorkdate = await fetch(
+        `${BASE_URL}/api/getWorkdate`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            gs_factoryCode,
+            classesCode: selectedClass.ClassCode,
+          }),
+        }
+      );
+
+      const dataWorkdate = await resWorkdate.json();
+   
+      if (!resWorkdate.ok ) {
+        Alert.alert("Error", "Unable to get workdate!");
+        return;
+      } 
+
+      setgs_workdate(dataWorkdate.workdate);
+      console.log("role", gs_roleCode);
+
+
 
       /* =========================
          ✅ SUCCESS LOGIN
@@ -401,9 +487,10 @@ export default function Login({ navigation }: any) {
 
           <View style={styles.form}>
             <CustomInput
+              ref={classRef}
               label="Classes"
               placeholder="Select Class"
-              value={selectedClass}
+              value={selectedClass?.ClassName}
               onChangeText={setSelectedClass}
               isSelect
               options={classOptions}
