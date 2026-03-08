@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from "react";
 import {
   View,
   Text,
@@ -7,141 +7,85 @@ import {
   StyleSheet,
   Alert,
   StatusBar,
+  ActivityIndicator,
   ListRenderItem,
-} from 'react-native';
+} from "react-native";
+import { useGlobal } from "../../GlobalContext.tsx";
 
-import { useEffect } from "react";
-import { useGlobal } from "../../GlobalContext";
-
-
-interface ConfirmBoxProps {
-  navigation?: any;
-  route?: {
-    params: {
-      palletCode: string;
-      onConfirm: (confirmed: boolean) => void;
-    };
-  };
-}
-
-
-interface WSCItem {
+interface BoxDetail {
   id: string;
-  code: string;
+  fxh: string;
+  palletCode: string;
+  boxCode: string;
   qty: number;
   model: string;
   color: string;
-  snItems?: { id: string; sn: string; imei1: string; imei2: string }[];
 }
 
-
-
-export default function ConfirmBox({ navigation, route }: ConfirmBoxProps) {
-  const { gsURL } = useGlobal();
+export default function AllocateSNBox({ navigation, route }: any) {
+  const { allocateCode } = route.params || {};
+  const global = useGlobal();
+  const { gsURL, gs_factoryCode, gs_wareCode } = global;
   const BASE_URL = gsURL;
-  
-  const { gs_factoryCode } = useGlobal();
 
-
-  const palletCode = route?.params?.palletCode || 'N/A';
-  const onConfirm = route?.params?.onConfirm || (() => {});
+  const [loading, setLoading] = useState(false);
+  const [items, setItems] = useState<BoxDetail[]>([]);
+  const [selectedItem, setSelectedItem] = useState<BoxDetail | null>(null);
 
   useEffect(() => {
-  const loadPalletDetails = async () => {
+    fetchBoxDetails();
+  }, []);
+
+  const fetchBoxDetails = async () => {
+    setLoading(true);
     try {
-      const res = await fetch(`${BASE_URL}/api/InPalletSNConfirmBox`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+      const response = await fetch(`${BASE_URL}/api/AllocatePalletSNBox`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           factoryCode: gs_factoryCode,
-          palletCode: palletCode,
-        }),
+          wareHouseCode: gs_wareCode,
+          allocateCode: allocateCode
+        })
       });
 
-      const data = await res.json();
-
-      if (!data.data || data.data.length === 0) {
-        Alert.alert("Message", "There is no product in the Pallet!");
-        return;
+      const result = await response.json();
+      if (result.message === 'success' && result.data && result.data.length > 0) {
+        const mappedData = result.data.map((row: any, index: number) => ({
+          id: index.toString(),
+          ...row,
+          qty: parseInt(row.qty || "0", 10)
+        }));
+        setItems(mappedData);
+      } else {
+        Alert.alert("Message", result.message || "There is no product in the Pallet!");
       }
-
-      // Mapping simple pour le frontend
-      const mappedData = data.data.map((row: any, index: any) => ({
-        id: index.toString(),
-        code: row.boxCode,
-        qty: parseInt(row.qty, 10),
-        model: row.model,
-        color: row.color,
-      }));
-
-      setItems(mappedData);
-
-    } catch (err) {
-      console.log(err);
-      Alert.alert("Error", "Failed to load pallet details");
+    } catch (error) {
+      Alert.alert("Error", "Failed to load box details");
+    } finally {
+      setLoading(false);
     }
   };
-
-  loadPalletDetails();
-}, [palletCode]);
-
-
-  
-
-  const [items, setItems] = useState<WSCItem[]>([
-  ]);
-
-  const [selectedItem, setSelectedItem] = useState<WSCItem | null>(null);
 
   const totalQty = useMemo<number>(
     () => items.reduce((sum, i) => sum + i.qty, 0),
     [items]
   );
 
-  const confirmBatch = (): void => {
-    //change it after
-    /*if (items.length === 0) {
-      Alert.alert('System Info', 'No active scans found to confirm.');
-      return;
-    }*/
-
-    Alert.alert(
-      'Confirm Batch Processing',
-      `Review Summary:\n\nTotal Boxes: ${items.length}\nTotal Units: ${totalQty}\n\nProceed with confirmation?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Confirm',
-          onPress: () => {
-            onConfirm(true);
-            navigation.goBack();
-
-            //setItems([]);
-            //setSelectedItem(null);
-
-            Alert.alert('Success', 'Batch processed and inventory updated.');
-          },
-        },
-      ]
-    );
-  };
-
   const showBarcodeDetails = (): void => {
-
     if (!selectedItem) {
       Alert.alert("Message", "Please select a box first.");
       return;
     }
 
-    const boxCode = selectedItem.code;
-
-    navigation.navigate("WSdetail", {
-      palletCode: palletCode,
-      boxCode: boxCode,
+    navigation.navigate('AllocateSN', {
+      allocateCode,
+      palletCode: selectedItem.palletCode,
+      boxCode: selectedItem.boxCode
     });
   };
 
-  const renderItem: ListRenderItem<WSCItem> = ({ item, index }) => (
+  const renderItem: ListRenderItem<BoxDetail> = ({ item, index }) => (
     <TouchableOpacity
       onPress={() => setSelectedItem(item)}
       style={[
@@ -151,10 +95,10 @@ export default function ConfirmBox({ navigation, route }: ConfirmBoxProps) {
       ]}
     >
       <Text style={[styles.cell, styles.cellNo]}>{index + 1}</Text>
-      <Text style={[styles.cell, styles.cellCode]}>{item.code}</Text>
+      <Text style={[styles.cell, styles.cellPallet]}>{item.palletCode}</Text>
+      <Text style={[styles.cell, styles.cellBox]}>{item.boxCode}</Text>
       <Text style={[styles.cell, styles.cellQty]}>{item.qty}</Text>
       <Text style={[styles.cell, styles.cellModel]}>{item.model}</Text>
-      <Text style={[styles.cell, styles.cellColor]}>{item.color}</Text>
     </TouchableOpacity>
   );
 
@@ -163,28 +107,28 @@ export default function ConfirmBox({ navigation, route }: ConfirmBoxProps) {
       <StatusBar barStyle="dark-content" />
 
       <View style={styles.header}>
-        <Text style={styles.title}>Warehousing Scanning Confirm</Text>
-        <Text style={styles.subtitle}>Batch Confirmation Dashboard</Text>
+        <Text style={styles.title}>Allocate SN Details</Text>
+        <Text style={styles.subtitle}>Code: {allocateCode}</Text>
       </View>
 
       <View style={styles.summaryCard}>
         <View>
-          <Text style={styles.summaryLabel}>Total Scanned</Text>
-          <Text style={styles.summaryValue}>{items.length} Boxes</Text>
+          <Text style={styles.summaryLabel}>Total Boxes</Text>
+          <Text style={styles.summaryValue}>{items.length}</Text>
         </View>
         <View style={styles.summaryDivider} />
         <View>
-          <Text style={styles.summaryLabel}>Net Quantity</Text>
+          <Text style={styles.summaryLabel}>Total Quantity</Text>
           <Text style={[styles.summaryValue, { color: '#2563eb' }]}>{totalQty} Units</Text>
         </View>
       </View>
 
       <View style={styles.tableHeader}>
         <Text style={[styles.headerCell, styles.cellNo]}>No</Text>
-        <Text style={[styles.headerCell, styles.cellCode]}>Box Code</Text>
+        <Text style={[styles.headerCell, styles.cellPallet]}>Pallet</Text>
+        <Text style={[styles.headerCell, styles.cellBox]}>Box</Text>
         <Text style={[styles.headerCell, styles.cellQty]}>Qty</Text>
         <Text style={[styles.headerCell, styles.cellModel]}>Model</Text>
-        <Text style={[styles.headerCell, styles.cellColor]}>Color</Text>
       </View>
 
       <FlatList
@@ -194,7 +138,7 @@ export default function ConfirmBox({ navigation, route }: ConfirmBoxProps) {
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>Waiting for scans...</Text>
+            {loading ? <ActivityIndicator color="#2563eb" /> : <Text style={styles.emptyText}>No data available</Text>}
           </View>
         }
       />
@@ -202,28 +146,17 @@ export default function ConfirmBox({ navigation, route }: ConfirmBoxProps) {
       <View style={styles.actionPanel}>
         <View style={styles.buttonRow}>
           <TouchableOpacity
-            style={[styles.actionBtn, styles.btnSecondary]}
-            onPress={showBarcodeDetails}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.btnTextSecondary}>Barcode Detail</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
             style={[styles.actionBtn, styles.btnPrimary]}
-            onPress={confirmBatch}
+            onPress={showBarcodeDetails}
             activeOpacity={0.8}
           >
-            <Text style={styles.btnTextPrimary}>Confirm</Text>
+            <Text style={styles.btnTextPrimary}>SN Detail</Text>
           </TouchableOpacity>
         </View>
 
         <TouchableOpacity
           style={styles.exitBtn}
-          onPress={() => {
-            onConfirm(false);   
-            navigation.goBack();
-          }}
+          onPress={() => navigation.goBack()}
         >
           <Text style={styles.exitText}>Close Terminal</Text>
         </TouchableOpacity>
@@ -231,11 +164,6 @@ export default function ConfirmBox({ navigation, route }: ConfirmBoxProps) {
     </View>
   );
 }
-
-
-
-// Styles restent les mêmes que ton code original
-
 
 const styles = StyleSheet.create({
   container: {
@@ -248,7 +176,7 @@ const styles = StyleSheet.create({
     paddingBottom: 15,
   },
   title: {
-    fontSize: 25,
+    fontSize: 22,
     fontWeight: '900',
     color: '#0f172a',
     letterSpacing: -0.5,
@@ -328,22 +256,22 @@ const styles = StyleSheet.create({
   rowEven: { backgroundColor: '#fff' },
   rowOdd: { backgroundColor: '#f8fafc' },
   cell: {
-    fontSize: 13,
+    fontSize: 11,
     color: '#334155',
     fontWeight: '600',
     textAlign: 'center',
   },
-  cellNo: { flex: 0.6 },
-  cellCode: {
+  cellNo: { flex: 0.5 },
+  cellPallet: { flex: 1.5 },
+  cellBox: {
     flex: 2,
     textAlign: 'left',
     paddingLeft: 8,
     color: '#2563eb',
     fontWeight: '800',
   },
-  cellQty: { flex: 1 },
+  cellQty: { flex: 0.8 },
   cellModel: { flex: 1.5 },
-  cellColor: { flex: 1.2 },
   emptyContainer: {
     padding: 40,
     alignItems: 'center',
@@ -378,20 +306,10 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 4,
   },
-  btnSecondary: {
-    backgroundColor: '#f1f5f9',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-  },
   btnTextPrimary: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '800',
-  },
-  btnTextSecondary: {
-    color: '#475569',
-    fontSize: 16,
-    fontWeight: '700',
   },
   exitBtn: {
     marginTop: 15,

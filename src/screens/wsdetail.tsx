@@ -1,4 +1,5 @@
-import React from 'react';
+
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -8,13 +9,19 @@ import {
   ListRenderItem,
   TouchableOpacity,
   Dimensions,
+  Alert,
 } from 'react-native';
+
+import { useGlobal } from "../../GlobalContext";
 
 interface WSSNItem {
   id: string;
   sn: string;
   imei1: string;
   imei2: string;
+  imei3?: string;
+  realdate?: string;
+  orderCode?: string;
 }
 
 interface WSSNTableProps {
@@ -22,12 +29,84 @@ interface WSSNTableProps {
   navigation: any;
 }
 
-export default function WSSNTableScreen({ route, navigation }: WSSNTableProps) {
-  const { boxCode, palletCode, snItems } = route.params as {
-    boxCode: string;
-    palletCode: string;
-    snItems: WSSNItem[];
+export default function WSSNTableScreen({ route, navigation }: any) {
+  const { gsURL } = useGlobal();
+  const BASE_URL = gsURL;
+  
+  const { palletCode, boxCode } = route.params;
+  const [snItems, setSnItems] = useState<WSSNItem[]>([]);
+  const [model, setModel] = useState("");
+  const [color, setColor] = useState("");
+
+  const { gs_wareType } = useGlobal();
+  const { gs_factoryCode } = useGlobal();
+  const { gs_wareCode } = useGlobal();
+
+  useEffect(() => {
+    initPage();
+  }, []);
+
+  const initPage = async () => {
+    // 1️⃣ Vérifier type warehouse
+    if (gs_wareType !== "MainWarehouse") {
+      Alert.alert("Error", "Only the main warehouse can be put in storage!");
+      navigation.goBack();
+      return;
+    }
+
+    if (palletCode) {
+      await getPalletSN(palletCode, boxCode);
+    }
   };
+
+  const getPalletSN = async (palletCode: string, boxCode: string) => {
+    try {
+      const response = await fetch(`${BASE_URL}/api/Pallet/InPalletSN`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          factoryCode: gs_factoryCode,
+          wareHouseCode: gs_wareCode,
+          palletCode,
+          boxCode,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!result?.data || result.data.length === 0) {
+        Alert.alert("Error", "There is no product in the Pallet!");
+        setSnItems([]);
+        return;
+      }
+
+      let fmodel = "";
+      let fcolor = "";
+
+      const formattedData: WSSNItem[] = result.data.map((item: any, index: number) => {
+        fmodel = item.model;
+        fcolor = item.color;
+
+        return {
+          id: index.toString(),
+          sn: item.sn,
+          imei1: item.imeiCode1,
+          imei2: item.imeiCode2,
+          imei3: item.imeiCode3,
+          realdate: item.realdate,
+          orderCode: item.orderCode,
+        };
+      });
+
+      setModel(fmodel);
+      setColor(fcolor);
+      setSnItems(formattedData);
+    } catch (error) {
+      console.error(error);
+      Alert.alert("Error", "Failed to load SN details");
+    }
+  };
+
 
   const totalSN = snItems.length;
   const { height } = Dimensions.get('window');
@@ -36,8 +115,11 @@ export default function WSSNTableScreen({ route, navigation }: WSSNTableProps) {
     <View style={[styles.row, index % 2 === 0 ? styles.rowEven : styles.rowOdd]}>
       <Text style={[styles.cell, styles.cellNo]}>{index + 1}</Text>
       <Text style={[styles.cell, styles.cellSN]}>{item.sn}</Text>
-      <Text style={[styles.cell, styles.cellIMEI]}>{item.imei1}</Text>
-      <Text style={[styles.cell, styles.cellIMEI]}>{item.imei2}</Text>
+      <Text style={[styles.cell, styles.cellIMEI]}>{item.imei1 || "-"}</Text>
+      <Text style={[styles.cell, styles.cellIMEI]}>{item.imei2 || "-"}</Text>
+      <Text style={[styles.cell, styles.cellIMEI]}>{item.imei3 || "-"}</Text>
+      <Text style={[styles.cell, styles.cellDate]}>{item.realdate || "-"}</Text>
+      <Text style={[styles.cell, styles.cellOrder]}>{item.orderCode || "-"}</Text>
     </View>
   );
 
@@ -71,6 +153,9 @@ export default function WSSNTableScreen({ route, navigation }: WSSNTableProps) {
           <Text style={[styles.headerText, styles.cellSN]}>SN</Text>
           <Text style={[styles.headerText, styles.cellIMEI]}>IMEI 1</Text>
           <Text style={[styles.headerText, styles.cellIMEI]}>IMEI 2</Text>
+          <Text style={[styles.headerText, styles.cellIMEI]}>IMEI 3</Text>
+          <Text style={[styles.headerText, styles.cellDate]}>Date</Text>
+          <Text style={[styles.headerText, styles.cellOrder]}>Order</Text>
         </View>
 
         {/* DATA LIST */}
@@ -195,6 +280,18 @@ const styles = StyleSheet.create({
   cellNo: { flex: 0.4 },
   cellSN: { flex: 1.2, fontWeight: '800', color: '#2563eb' },
   cellIMEI: { flex: 2, fontSize: 11, color: '#64748b' },
+
+  cellDate: {
+    flex: 1.5,
+    fontSize: 10,
+    color: '#64748b',
+  },
+
+  cellOrder: {
+    flex: 1.5,
+    fontSize: 10,
+    color: '#475569',
+  },
 
   emptyText: {
     textAlign: 'center',

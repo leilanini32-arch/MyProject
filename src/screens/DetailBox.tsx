@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,8 @@ import {
   ListRenderItem,
 } from 'react-native';
 
+import { useGlobal } from "../../GlobalContext";
+
 interface WSCItem {
   id: string;
   code: string;
@@ -19,26 +21,17 @@ interface WSCItem {
   snItems?: { id: string; sn: string; imei1: string; imei2: string }[];
 }
 
-export default function WSCTableScreen1({ navigation }: any) {
+export default function WSCTableScreen1({ navigation, route }: any) {
+  const { gsURL } = useGlobal();
+  const BASE_URL = gsURL;
+  
+  const { palletCode } = route.params || {};
   const [items, setItems] = useState<WSCItem[]>([
-    { 
-      id: '1', code: 'BX-1001', qty: 5, model: 'Alpha', color: 'Red',
-      snItems: [
-        { id: '1', sn: 'SN-9901', imei1: '358291002231', imei2: '358291002232' },
-        { id: '2', sn: 'SN-9902', imei1: '358291002241', imei2: '358291002242' },
-      ]
-    },
-    { 
-      id: '2', code: 'BX-1002', qty: 3, model: 'Core-X', color: 'Blue',
-      snItems: [
-        { id: '3', sn: 'SN-9903', imei1: '358291002251', imei2: '358291002252' },
-      ]
-    },
-    { 
-      id: '3', code: 'BX-1003', qty: 2, model: 'Prime', color: 'Green',
-      snItems: []
-    },
+
   ]);
+  const { gs_wareType } = useGlobal();
+  const { gs_factoryCode } = useGlobal();
+  const { gs_wareCode } = useGlobal();
 
   const [selectedItem, setSelectedItem] = useState<WSCItem | null>(null);
 
@@ -47,24 +40,91 @@ export default function WSCTableScreen1({ navigation }: any) {
     [items]
   );
 
+  useEffect(() => {
+    initPage();
+  }, []);
 
+  const initPage = async () => {
 
-  const showBarcodeDetails = (): void => {
-    if (!selectedItem) {
-      Alert.alert('Select Box', 'Please select a box to view details.');
+    if (gs_wareType !== "MainWarehouse") {
+      Alert.alert("Error", "Only the main warehouse can be put in storage!");
+      navigation.goBack();
       return;
     }
 
-    navigation.navigate('WSdetail', {
-      boxCode: selectedItem.code,
-      snItems: selectedItem.snItems || [],
-    });
+    if (palletCode) {
+      getPalletSNConfirm(palletCode);
+    }
   };
+
+  const getPalletSNConfirm = async (palletCode: string) => {
+  try {
+    const response = await fetch(`${BASE_URL}/api/InPalletSNBox`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        factoryCode: gs_factoryCode,
+        wareHouseCode: gs_wareCode,
+        palletCode: palletCode,
+      }),
+    });
+
+    const result = await response.json();
+
+    // Vérifie si la structure "data" existe
+    if (!result || !result.data || result.data.length === 0) {
+      Alert.alert("Error", "There is no product in the Pallet!");
+      setItems([]);
+      return;
+    }
+
+    let qtyTotal = 0;
+
+    const formattedData: WSCItem[] = result.data.map((row: any, index: number) => {
+      const qty = parseInt(row.qty, 10);
+      qtyTotal += qty;
+
+      return {
+        id: index.toString(),
+        code: row.boxCode,
+        qty,
+        model: row.model,
+        color: row.color,
+        snItems: [], // tu peux remplir si nécessaire plus tard
+      };
+    });
+
+    setItems(formattedData);
+    console.log("Total Qty:", qtyTotal);
+
+  } catch (error) {
+    console.error(error);
+    Alert.alert("Error", "Failed to load pallet details");
+  }
+};
+
+ const showBarcodeDetails = (): void => {
+
+  if (!selectedItem) {
+    Alert.alert("Message", "Please select a box first.");
+    return;
+  }
+
+  const boxCode = selectedItem.code;
+
+  navigation.navigate("WSdetail", {
+    palletCode: palletCode,
+    boxCode: boxCode,
+  });
+
+};
 
   const renderItem: ListRenderItem<WSCItem> = ({ item, index }) => (
     <TouchableOpacity
       onPress={() => setSelectedItem(item)}
-      style={[   
+      style={[
         styles.row,
         index % 2 === 0 ? styles.rowEven : styles.rowOdd,
         selectedItem?.id === item.id && { backgroundColor: '#dbeafe' },
@@ -129,7 +189,7 @@ export default function WSCTableScreen1({ navigation }: any) {
             <Text style={styles.btnTextSecondary}>Barcode Detail</Text>
           </TouchableOpacity>
 
-         
+
         </View>
 
         <TouchableOpacity

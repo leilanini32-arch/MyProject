@@ -5,7 +5,12 @@ import React, { createContext, useContext, useState } from "react";
 /* =========================
    Type pour le contexte global
 ========================= */
+
+
 type GlobalContextType = {
+
+  gsURL: string;
+  setgs_gsURL: (v: string) => void;
   // Factory
   gs_factoryCode: string;
   setgs_factoryCode: (v: string) => void;
@@ -64,6 +69,10 @@ const GlobalContext = createContext<GlobalContextType | null>(null);
    Provider
 ========================= */
 export const GlobalProvider = ({ children }: { children: React.ReactNode }) => {
+
+
+
+  const [gsURL, _setgsgsURL] = useState("http://192.168.137.1:7278"); 
   // Factory
   const [gs_factoryCode, _setFactoryCode] = useState("001");
 
@@ -77,7 +86,7 @@ export const GlobalProvider = ({ children }: { children: React.ReactNode }) => {
   const [gs_className, _setClassName] = useState("");
 
   // Group
-  const [gs_groupCode, _setGroupCode] = useState("");
+  const [gs_groupCode, _setGroupCode] = useState("BZ001");
   const [gs_groupName, _setGroupName] = useState("");
 
   // User
@@ -100,6 +109,10 @@ export const GlobalProvider = ({ children }: { children: React.ReactNode }) => {
   return (
     <GlobalContext.Provider
       value={{
+
+        gsURL,
+        setgs_gsURL: _setgsgsURL,
+
         gs_factoryCode,
         setgs_factoryCode: _setFactoryCode,
 

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -11,7 +11,10 @@ import {
   Alert,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
-import { useGlobal } from "./GlobalContext";
+import { useGlobal } from "../../GlobalContext";
+
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 
 type RowType = {
   Boxcode: string;
@@ -20,47 +23,55 @@ type RowType = {
   Qty: string;
 };
 
-const BASE_URL = "http://10.164.222.93:3000";
 
-export default function Scan({ navigation }: any) {
+export default function WarehousingScanningScreen({ navigation }: any) {
+  const { gsURL } = useGlobal();
+  const BASE_URL = gsURL;
+
   const [barcode, setBarcode] = useState("");
   const [pallet, setPallet] = useState("");
   const [qty, setQty] = useState("");
   const [row, setRow] = useState<RowType | null>(null);
+  const [showKeyboard, setShowKeyboard] = useState(false);
+
+  const inputRef = useRef<TextInput>(null);
+
+  const { gs_factoryCode } = useGlobal();
+  const { gs_wareCode } = useGlobal();
+  const { gs_wareType } = useGlobal();
+  const { gs_classCode } = useGlobal();
+  const { gs_workdate } = useGlobal();
+  const { gs_userCode } = useGlobal();
 
 
-  const { gs_factoryCode, setgs_factoryCode } = useGlobal();
-  const { gs_wareCode, setgs_wareCode } = useGlobal();
-  const { gs_wareName, setgs_wareName } = useGlobal();
-  const { gs_wareType, setgs_wareType } = useGlobal();
-  const { gs_classCode, setgs_classCode } = useGlobal();
-  const { gs_className, setgs_className } = useGlobal();
-  const { gs_workdate, setgs_workdate } = useGlobal();
-  const { gs_userCode, setgs_userCode } = useGlobal();
-  const { gs_userName, setgs_userName } = useGlobal();
-  const { gs_roleCode, setgs_roleCode } = useGlobal();
-
-  // Réinitialisation automatique quand l'écran devient actif
   useFocusEffect(
     useCallback(() => {
       setBarcode("");
-      setPallet("");
-      setQty("");
       setRow(null);
+      setTimeout(() => inputRef.current?.focus(), 100);
     }, [])
   );
 
-
+  // PDA Optimization: Keep focus on input even if user taps elsewhere
+  const ensureFocus = () => {
+    if (inputRef.current) {
+      inputRef.current.focus();
+    }
+  };
 
 
   const handleScan = async () => {
     if (!barcode.trim()) return;
 
     try {
-      // 1️⃣ Vérifier le code scanné
+      // const token = await AsyncStorage.getItem("userToken");
+
       const resCheck = await fetch(`${BASE_URL}/api/InBarcodeCheck`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          // "Authorization": `Bearer ${token}` // si besoin
+        },
         body: JSON.stringify({
           factoryCode: gs_factoryCode,
           scanCode: barcode.trim(),
@@ -69,21 +80,24 @@ export default function Scan({ navigation }: any) {
 
       const dataCheck = await resCheck.json();
 
-      if (!resCheck.ok || !dataCheck.dt || dataCheck.dt.length === 0) {
+      if (!resCheck.ok || !dataCheck.data) {
         Alert.alert("Error", "Data handling exceptions, please check!");
         setBarcode("");
+        inputRef.current?.focus();
         return;
       }
 
-      const record = dataCheck.dt[0];
+      const record = dataCheck.data; // InBarcodeCheckResponse est un objet unique
       if (record.isok !== "1") {
         Alert.alert("Error", record.retstr || "Invalid barcode!");
         console.log(record.retstr);
         setBarcode("");
+        inputRef.current?.focus();
         return;
       }
 
       // ✅ Code valide, récupérer palletCode et scanType
+
       const palletCode = record.palletCode;
       const scanType = record.scanType;
 
@@ -92,10 +106,11 @@ export default function Scan({ navigation }: any) {
         palletCode,
         onConfirm: async (confirmed: boolean) => {
           if (!confirmed) {
-            // Annulé
+            setPallet(palletCode);
             setBarcode("");
             setRow(null);
             setQty("");
+            setTimeout(() => inputRef.current?.focus(), 100);
             return;
           }
 
@@ -110,30 +125,37 @@ export default function Scan({ navigation }: any) {
               palletCode,
               scanBarCode: barcode.trim(),
               classesCode: gs_classCode,
-              groupCode: "GRP01",
+              groupCode: "BZ001",
               workdate: gs_workdate,
               createUser: gs_userCode,
             }),
           });
 
+
           const dataInsert = await resInsert.json();
 
-          if (!resInsert.ok || !dataInsert.dt || dataInsert.dt.length === 0) {
+          // Vérifie si la réponse contient des données
+          if (!resInsert.ok || !dataInsert.data || dataInsert.data.length === 0) {
             Alert.alert("Error", "No product in the pallet!");
             setBarcode("");
+            inputRef.current?.focus();
             return;
           }
+          // Premier enregistrement
+          const insertRecord = dataInsert.data[0];
 
-          const insertRecord = dataInsert.dt[0];
+          // Vérifie le succès de l’insertion
           if (insertRecord.isok !== "1") {
             Alert.alert("Error", insertRecord.retstr || "Insert failed!");
             setBarcode("");
+            inputRef.current?.focus();
             return;
           }
 
-          // 4️⃣ Mettre à jour l'interface
 
-          console.log("datainsere"+insertRecord);
+
+          // 4️⃣ Mettre à jour l'interface
+          console.log("datainsere::", insertRecord);
 
           setRow({
             Boxcode: insertRecord.scanBarcodeLarge,
@@ -144,14 +166,28 @@ export default function Scan({ navigation }: any) {
           setPallet(palletCode);
           setQty(insertRecord.totalQty);
           setBarcode("");
+          setTimeout(() => inputRef.current?.focus(), 100);
+
         },
       });
     } catch (err) {
       console.error(err);
       Alert.alert("Error", "Cannot reach server or something went wrong!");
       setBarcode("");
+      inputRef.current?.focus();
     }
   };
+
+  const handleDetails = () => {
+    if (!pallet || pallet.trim() === '') {
+      return;
+    }
+
+    navigation.navigate('DetailBox', {
+      palletCode: pallet,
+    });
+  };
+
 
 
   const tableHeaders = ["Boxcode", "Model", "Color", "Qty"];
@@ -174,10 +210,23 @@ export default function Scan({ navigation }: any) {
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Scan Barcode</Text>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+              <Text style={styles.label}>Scan Barcode</Text>
+              <TouchableOpacity
+                onPress={() => {
+                  setShowKeyboard(!showKeyboard);
+                  setTimeout(() => inputRef.current?.focus(), 100);
+                }}
+                style={styles.keyboardToggle}
+              >
+                <Text style={styles.keyboardToggleText}>
+                  {showKeyboard ? "⌨️ Hide Keyboard" : "⌨️ Show Keyboard"}
+                </Text>
+              </TouchableOpacity>
+            </View>
             <TextInput
-
-              placeholder="Scan or enter barcode"
+              ref={inputRef}
+              placeholder="Scan Barcode"
               editable={gs_wareType === "MainWarehouse"}
               style={[
                 styles.input,
@@ -187,6 +236,10 @@ export default function Scan({ navigation }: any) {
               value={barcode}
               onChangeText={setBarcode}
               onSubmitEditing={handleScan}
+              autoFocus={true}
+              showSoftInputOnFocus={showKeyboard} // PDA Optimization: Toggle virtual keyboard
+              blurOnSubmit={false}         // PDA Optimization: Keep focus after scan
+              onBlur={ensureFocus}         // PDA Optimization: Regain focus if lost
             />
           </View>
 
@@ -198,7 +251,7 @@ export default function Scan({ navigation }: any) {
                 placeholder="—"
                 placeholderTextColor="#94A3B8"
                 value={pallet}
-                editable={true}
+                editable={false}
               />
             </View>
 
@@ -264,7 +317,7 @@ export default function Scan({ navigation }: any) {
         <View style={styles.actionContainer}>
           <TouchableOpacity
             style={[styles.btn, styles.btnPrimary]}
-            onPress={() => navigation.navigate("DetailBox")}
+            onPress={handleDetails}
           >
             <Text style={styles.btnText}>View Details</Text>
           </TouchableOpacity>
@@ -336,4 +389,17 @@ const styles = StyleSheet.create({
   btnSecondary: { backgroundColor: "#FEE2E2", borderWidth: 1, borderColor: "#FECACA" },
   btnText: { color: "#FFFFFF", fontWeight: "800", fontSize: 16 },
   btnTextSecondary: { color: "#EF4444", fontWeight: "800", fontSize: 16 },
+  keyboardToggle: {
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+  },
+  keyboardToggleText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#4F46E5',
+  },
 });
