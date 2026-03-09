@@ -38,8 +38,15 @@ export default function AllocateInNO({ navigation }: any) {
     const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
     const [loading, setLoading] = useState(false);
     const [f_systemAllocateCode, setFSystemAllocateCode] = useState("");
+    const [showKeyboard, setShowKeyboard] = useState(false);
 
     const snRef = useRef<TextInput>(null);
+
+    const ensureFocus = () => {
+        if (snRef.current) {
+            snRef.current.focus();
+        }
+    };
 
     useEffect(() => {
         snRef.current?.focus();
@@ -162,7 +169,20 @@ export default function AllocateInNO({ navigation }: any) {
 
             <View style={styles.content}>
                 <View style={styles.card}>
-                    <Text style={styles.cardTitle}>Scan Allocate Code</Text>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                        <Text style={styles.cardTitle}>Scan Allocate Code</Text>
+                        <TouchableOpacity 
+                            onPress={() => {
+                                setShowKeyboard(!showKeyboard);
+                                setTimeout(() => snRef.current?.focus(), 100);
+                            }}
+                            style={styles.keyboardToggle}
+                        >
+                            <Text style={styles.keyboardToggleText}>
+                                {showKeyboard ? "⌨️ Hide Keyboard" : "⌨️ Show Keyboard"}
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
                     {errorMsg ? <Text style={styles.errorText}>{errorMsg}</Text> : null}
 
                     <TextInput
@@ -173,6 +193,9 @@ export default function AllocateInNO({ navigation }: any) {
                         onSubmitEditing={handleSnSubmit}
                         placeholder="Scan or enter Allocate Code"
                         autoCapitalize="characters"
+                        showSoftInputOnFocus={showKeyboard}
+                        blurOnSubmit={false}
+                        onBlur={ensureFocus}
                     />
                 </View>
 
@@ -185,13 +208,13 @@ export default function AllocateInNO({ navigation }: any) {
                                     <Text key={h} style={[styles.cell, styles.headerCell]}>{h}</Text>
                                 ))}
                             </View>
-                            <FlatList
-                                data={items}
-                                renderItem={renderItem}
-                                keyExtractor={(_, index) => index.toString()}
-                                ListEmptyComponent={<Text style={styles.empty}>Waiting for Scanning...</Text>}
-                                showsVerticalScrollIndicator={true}
-                            />
+                            <ScrollView style={{ flex: 1 }}>
+                                {items.length === 0 ? (
+                                    <Text style={styles.empty}>Waiting for Scanning...</Text>
+                                ) : (
+                                    items.map((item, index) => renderItem({ item, index }))
+                                )}
+                            </ScrollView>
                         </View>
                     </ScrollView>
                 </View>
@@ -252,4 +275,17 @@ const styles = StyleSheet.create({
     secondaryButtonText: { color: "#EF4444", fontWeight: "900", fontSize: 16 },
     errorText: { color: "#EF4444", fontSize: 12, marginBottom: 8, fontWeight: "700" },
     selectedRow: { backgroundColor: "#E0E7FF" },
+    keyboardToggle: {
+        backgroundColor: '#F1F5F9',
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 6,
+        borderWidth: 1,
+        borderColor: '#CBD5E1',
+    },
+    keyboardToggleText: {
+        fontSize: 10,
+        fontWeight: '700',
+        color: '#4F46E5',
+    },
 });

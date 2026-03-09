@@ -24,7 +24,7 @@ type RowType = {
 };
 
 
-export default function WarehousingScanningScreen({ navigation }: any) {
+export default function WarehousingScanning({ navigation }: any) {
   const { gsURL } = useGlobal();
   const BASE_URL = gsURL;
 

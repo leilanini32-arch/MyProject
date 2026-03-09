@@ -38,6 +38,7 @@ export default function AllocateSAP({ navigation }: any) {
   const [items, setItems] = useState<AllocateItem[]>([]);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
+  const [showKeyboard, setShowKeyboard] = useState(false);
 
   // Internal tracking variables
   const [f_systemAllocateCode, setFSystemAllocateCode] = useState("");
@@ -47,6 +48,10 @@ export default function AllocateSAP({ navigation }: any) {
   const bonRef = useRef<TextInput>(null);
   const depotRef = useRef<TextInput>(null);
   const modelRef = useRef<TextInput>(null);
+
+  const ensureFocus = () => {
+    if (bonRef.current?.isFocused() || depotRef.current?.isFocused() || modelRef.current?.isFocused()) return;
+  };
 
   useEffect(() => {
     bonRef.current?.focus();
@@ -89,7 +94,7 @@ export default function AllocateSAP({ navigation }: any) {
       let fromck = "";
       let tock = "";
 
-      if (planData && planData.data) {
+      if (planData && Array.isArray(planData.data)) {
         planData.data.forEach((row: any) => {
           newItems.push({
             bonNo: systemAllocateCode,
@@ -197,44 +202,76 @@ export default function AllocateSAP({ navigation }: any) {
         </View>
       </View>
 
-      <View style={styles.content}>
+      <ScrollView 
+        style={styles.content} 
+        contentContainerStyle={{ flexGrow: 1, paddingBottom: 20 }}
+        keyboardShouldPersistTaps="handled"
+      >
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Allocate Entry</Text>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+            <Text style={styles.cardTitle}>Allocate Entry</Text>
+            <TouchableOpacity 
+              onPress={() => {
+                setShowKeyboard(!showKeyboard);
+                bonRef.current?.focus();
+              }}
+              style={styles.keyboardToggle}
+            >
+              <Text style={styles.keyboardToggleText}>
+                {showKeyboard ? "⌨️ Hide Keyboard" : "⌨️ Show Keyboard"}
+              </Text>
+            </TouchableOpacity>
+          </View>
           {errorMsg ? <Text style={styles.errorText}>{errorMsg}</Text> : null}
 
-          <Text style={styles.label}>BON NO.</Text>
-          <TextInput
-            ref={bonRef}
-            style={styles.input}
-            value={bonNo}
-            onChangeText={setBonNo}
-            onSubmitEditing={handleBonSubmit}
-            placeholder="Scan or enter BON"
-            autoCapitalize="characters"
-          />
+          <View style={styles.compactInputRow}>
+            <Text style={styles.compactLabel}>BON NO.</Text>
+            <TextInput
+              ref={bonRef}
+              style={styles.compactInput}
+              value={bonNo}
+              onChangeText={setBonNo}
+              onSubmitEditing={handleBonSubmit}
+              placeholder="Scan BON"
+              autoCapitalize="characters"
+              showSoftInputOnFocus={showKeyboard}
+              blurOnSubmit={false}
+              onBlur={ensureFocus}
+            />
+          </View>
 
-          <Text style={styles.label}>DEPOT NO.</Text>
-          <TextInput
-            ref={depotRef}
-            style={styles.input}
-            value={depotNo}
-            onChangeText={setDepotNo}
-            placeholder="fromck#tock"
-            autoCapitalize="characters"
-          />
+          <View style={styles.compactInputRow}>
+            <Text style={styles.compactLabel}>DEPOT</Text>
+            <TextInput
+              ref={depotRef}
+              style={styles.compactInput}
+              value={depotNo}
+              onChangeText={setDepotNo}
+              placeholder="from#to"
+              autoCapitalize="characters"
+              showSoftInputOnFocus={showKeyboard}
+              blurOnSubmit={false}
+              onBlur={ensureFocus}
+            />
+          </View>
 
-          <Text style={styles.label}>MODEL</Text>
-          <TextInput
-            ref={modelRef}
-            style={styles.input}
-            value={modelInput}
-            onChangeText={setModelInput}
-            placeholder="model#qty#price"
-            autoCapitalize="characters"
-          />
+          <View style={styles.compactInputRow}>
+            <Text style={styles.compactLabel}>MODEL</Text>
+            <TextInput
+              ref={modelRef}
+              style={styles.compactInput}
+              value={modelInput}
+              onChangeText={setModelInput}
+              placeholder="model#qty#price"
+              autoCapitalize="characters"
+              showSoftInputOnFocus={showKeyboard}
+              blurOnSubmit={false}
+              onBlur={ensureFocus}
+            />
+          </View>
         </View>
 
-        <View style={[styles.card, { flex: 1 }]}>
+        <View style={styles.card}>
           <Text style={styles.cardTitle}>Allocate Details</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={true}>
             <View>
@@ -243,13 +280,13 @@ export default function AllocateSAP({ navigation }: any) {
                   <Text key={h} style={[styles.cell, styles.headerCell]}>{h}</Text>
                 ))}
               </View>
-              <FlatList
-                data={items}
-                renderItem={renderItem}
-                keyExtractor={(_, index) => index.toString()}
-                ListEmptyComponent={<Text style={styles.empty}>Waiting for Scanning...</Text>}
-                showsVerticalScrollIndicator={true}
-              />
+              <View>
+                {items.length === 0 ? (
+                  <Text style={styles.empty}>Waiting for Scanning...</Text>
+                ) : (
+                  items.map((item, index) => renderItem({ item, index }))
+                )}
+              </View>
             </View>
           </ScrollView>
         </View>
@@ -262,7 +299,7 @@ export default function AllocateSAP({ navigation }: any) {
             <Text style={styles.secondaryButtonText}>Exit</Text>
           </TouchableOpacity>
         </View>
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -288,6 +325,18 @@ const styles = StyleSheet.create({
     borderColor: "#E2E8F0",
   },
   cardTitle: { fontSize: 13, fontWeight: "900", marginBottom: 10, color: "#475569", textTransform: "uppercase" },
+  compactInputRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  compactLabel: { width: 60, fontSize: 11, fontWeight: "700", color: "#64748B" },
+  compactInput: {
+    flex: 1,
+    backgroundColor: "#F1F5F9",
+    padding: 8,
+    borderRadius: 8,
+    fontSize: 13,
+    color: "#000",
+    borderWidth: 1,
+    borderColor: "#CBD5E1",
+  },
   label: { fontSize: 11, fontWeight: "700", marginTop: 8, color: "#64748B" },
   input: {
     backgroundColor: "#F1F5F9",
@@ -311,4 +360,17 @@ const styles = StyleSheet.create({
   secondaryButtonText: { color: "#EF4444", fontWeight: "900", fontSize: 16 },
   errorText: { color: "#EF4444", fontSize: 12, marginBottom: 8, fontWeight: "700" },
   selectedRow: { backgroundColor: "#E0E7FF" },
+  keyboardToggle: {
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+  },
+  keyboardToggleText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#4F46E5',
+  },
 });

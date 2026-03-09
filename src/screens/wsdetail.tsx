@@ -32,7 +32,7 @@ interface WSSNTableProps {
 export default function WSSNTableScreen({ route, navigation }: any) {
   const { gsURL } = useGlobal();
   const BASE_URL = gsURL;
-  
+
   const { palletCode, boxCode } = route.params;
   const [snItems, setSnItems] = useState<WSSNItem[]>([]);
   const [model, setModel] = useState("");
@@ -73,7 +73,7 @@ export default function WSSNTableScreen({ route, navigation }: any) {
       });
 
       const result = await response.json();
-
+      console.log(result);
       if (!result?.data || result.data.length === 0) {
         Alert.alert("Error", "There is no product in the Pallet!");
         setSnItems([]);

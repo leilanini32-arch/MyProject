@@ -38,6 +38,7 @@ export default function DeliverySAP({ navigation, route }: any) {
   const [items, setItems] = useState<DeliveryItem[]>([]);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
+  const [showKeyboard, setShowKeyboard] = useState(false);
 
   // Internal tracking variables (equivalent to f_ variables in C#)
   const [f_systemDeliveryCode, setFSystemDeliveryCode] = useState("");
@@ -47,6 +48,12 @@ export default function DeliverySAP({ navigation, route }: any) {
   const bonRef = useRef<TextInput>(null);
   const depotRef = useRef<TextInput>(null);
   const modelRef = useRef<TextInput>(null);
+
+  const ensureFocus = () => {
+    if (bonRef.current) {
+      bonRef.current.focus();
+    }
+  };
 
   useEffect(() => {
     bonRef.current?.focus();
@@ -197,13 +204,30 @@ export default function DeliverySAP({ navigation, route }: any) {
         </View>
       </View>
 
-      <View style={styles.content}>
+      <ScrollView 
+        style={styles.content} 
+        contentContainerStyle={{ flexGrow: 1, paddingBottom: 20 }}
+        keyboardShouldPersistTaps="handled"
+      >
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Delivery Entry</Text>
 
           {errorMsg ? <Text style={styles.errorText}>{errorMsg}</Text> : null}
 
-          <Text style={styles.label}>BON NO.</Text>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+            <Text style={styles.label}>BON NO.</Text>
+            <TouchableOpacity 
+              onPress={() => {
+                setShowKeyboard(!showKeyboard);
+                setTimeout(() => bonRef.current?.focus(), 100);
+              }}
+              style={styles.keyboardToggle}
+            >
+              <Text style={styles.keyboardToggleText}>
+                {showKeyboard ? "⌨️ Hide Keyboard" : "⌨️ Show Keyboard"}
+              </Text>
+            </TouchableOpacity>
+          </View>
           <TextInput
             ref={bonRef}
             style={styles.input}
@@ -212,6 +236,9 @@ export default function DeliverySAP({ navigation, route }: any) {
             onSubmitEditing={handleBonSubmit}
             placeholder="Scan or enter BON"
             autoCapitalize="characters"
+            showSoftInputOnFocus={showKeyboard}
+            blurOnSubmit={false}
+            onBlur={ensureFocus}
           />
 
           <Text style={styles.label}>DEPOT NO.</Text>
@@ -235,7 +262,7 @@ export default function DeliverySAP({ navigation, route }: any) {
           />
         </View>
 
-        <View style={[styles.card, { flex: 1 }]}>
+        <View style={styles.card}>
           <Text style={styles.cardTitle}>Recent Scan Details</Text>
            
           <ScrollView horizontal showsHorizontalScrollIndicator={true}>
@@ -245,13 +272,16 @@ export default function DeliverySAP({ navigation, route }: any) {
                   <Text key={h} style={[styles.cell, styles.headerCell]}>{h}</Text>
                 ))}
               </View>
-              <FlatList
-                data={items}
-                renderItem={renderItem}
-                keyExtractor={(_, index) => index.toString()}
-                ListEmptyComponent={<Text style={styles.empty}>Waiting for Scanning...</Text>}
-                showsVerticalScrollIndicator={true}
-              />
+              <ScrollView 
+                style={{ height: 120 }} 
+                nestedScrollEnabled={true}
+              >
+                {items.length === 0 ? (
+                  <Text style={styles.empty}>Waiting for Scanning...</Text>
+                ) : (
+                  items.map((item, index) => renderItem({ item, index }))
+                )}
+              </ScrollView>
             </View>
           </ScrollView>
         </View>
@@ -264,7 +294,7 @@ export default function DeliverySAP({ navigation, route }: any) {
             <Text style={styles.secondaryButtonText}>Exit</Text>
           </TouchableOpacity>
         </View>
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -332,10 +362,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     borderBottomWidth: 1,
     borderBottomColor: "#F1F5F9",
+    height: 40,
   },
   cell: {
     width: 90,
-    padding: 12,
+    paddingVertical: 12,
     fontSize: 11,
     textAlign: "center",
     fontWeight: "600",
@@ -348,7 +379,7 @@ const styles = StyleSheet.create({
   },
   empty: {
     textAlign: "center",
-    padding: 40,
+    padding: 20,
     color: "#94A3B8",
     fontStyle: "italic",
     width: 810,
@@ -388,4 +419,17 @@ const styles = StyleSheet.create({
   },
   errorText: { color: "#EF4444", fontSize: 12, marginBottom: 8, fontWeight: "700" },
   selectedRow: { backgroundColor: "#E0E7FF" },
+  keyboardToggle: {
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+  },
+  keyboardToggleText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#4F46E5',
+  },
 });

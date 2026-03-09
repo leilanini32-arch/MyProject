@@ -72,7 +72,7 @@ export default function WSCTableScreen1({ navigation, route }: any) {
     });
 
     const result = await response.json();
-
+    
     // Vérifie si la structure "data" existe
     if (!result || !result.data || result.data.length === 0) {
       Alert.alert("Error", "There is no product in the Pallet!");

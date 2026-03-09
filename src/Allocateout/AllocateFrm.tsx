@@ -32,8 +32,15 @@ export default function AllocateFrm({ navigation, route }: any) {
     const [totalQty, setTotalQty] = useState("");
     const [tableData, setTableData] = useState<RowType[]>([]);
     const [loading, setLoading] = useState(false);
+    const [showKeyboard, setShowKeyboard] = useState(false);
 
     const inputRef = useRef<TextInput>(null);
+
+    const ensureFocus = () => {
+        if (inputRef.current) {
+            inputRef.current.focus();
+        }
+    };
 
     const fetchAllocateCheck = useCallback(async () => {
         if (!allocateCode) return;
@@ -203,7 +210,20 @@ export default function AllocateFrm({ navigation, route }: any) {
                     </View>
 
                     <View style={styles.inputGroup}>
-                        <Text style={styles.label}>SCAN BARCODE</Text>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                            <Text style={styles.label}>SCAN BARCODE</Text>
+                            <TouchableOpacity 
+                                onPress={() => {
+                                    setShowKeyboard(!showKeyboard);
+                                    setTimeout(() => inputRef.current?.focus(), 100);
+                                }}
+                                style={styles.keyboardToggle}
+                            >
+                                <Text style={styles.keyboardToggleText}>
+                                    {showKeyboard ? "⌨️ Hide Keyboard" : "⌨️ Show Keyboard"}
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
                         <TextInput
                             ref={inputRef}
                             style={styles.input}
@@ -212,6 +232,9 @@ export default function AllocateFrm({ navigation, route }: any) {
                             onSubmitEditing={handleBarcodeSubmit}
                             placeholder="Scan Pallet/Box/SN"
                             autoFocus={true}
+                            showSoftInputOnFocus={showKeyboard}
+                            blurOnSubmit={false}
+                            onBlur={ensureFocus}
                         />
                     </View>
 
@@ -346,5 +369,18 @@ const styles = StyleSheet.create({
         justifyContent: "center",
         alignItems: "center",
         zIndex: 1000,
+    },
+    keyboardToggle: {
+        backgroundColor: '#F1F5F9',
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 6,
+        borderWidth: 1,
+        borderColor: '#CBD5E1',
+    },
+    keyboardToggleText: {
+        fontSize: 10,
+        fontWeight: '700',
+        color: '#4F46E5',
     },
 });

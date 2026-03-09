@@ -11,9 +11,9 @@ import {
     Alert,
     TextInput,
     ScrollView,
-    Dimensions, Platform 
+    Dimensions, Platform
 } from "react-native";
-import { useGlobal } from "../../GlobalContext.tsx";
+import { useGlobal } from "../../GlobalContext";
 
 interface ScannedItem {
     id: string;
@@ -42,8 +42,15 @@ export default function PD({ navigation }: any) {
     const [scannedItems, setScannedItems] = useState<ScannedItem[]>([]);
     const [totalQty, setTotalQty] = useState(0);
     const [showConfirmBtn, setShowConfirmBtn] = useState(false);
+    const [showKeyboard, setShowKeyboard] = useState(false);
 
     const barcodeInputRef = useRef<TextInput>(null);
+
+    const ensureFocus = () => {
+        if (barcodeInputRef.current) {
+            barcodeInputRef.current.focus();
+        }
+    };
 
     const fetchOrders = useCallback(async () => {
         setLoading(true);
@@ -63,6 +70,8 @@ export default function PD({ navigation }: any) {
             console.log("getinvenoty1 ", result);
             if (result.message === "success" && result.data) {
                 setOrders(result.data);
+                
+
             } else {
                 setOrders([]);
             }
@@ -92,6 +101,7 @@ export default function PD({ navigation }: any) {
 
             const result = await response.json();
             if (result.message === "success" && result.data && result.data.length > 0) {
+                barcodeInputRef.current?.focus();
                 const order = result.data[0];
                 setInventoryType(order.inventoryType || "");
                 setModel(order.model || "");
@@ -153,12 +163,12 @@ export default function PD({ navigation }: any) {
         }
     };
 
-    const handleScan = async () => {
+    const handleScan = async (text?: string) => {
         if (!selectedOrder) {
             Alert.alert("Notice", "Please select inventory NO. first.");
             return;
         }
-        const code = barcode.trim().toUpperCase();
+        const code = (text || barcode).trim().toUpperCase();
         if (!code) return;
 
         setLoading(true);
@@ -187,7 +197,7 @@ export default function PD({ navigation }: any) {
                         inventoryType: inventoryType,
                         inventoryModel: model,
                         scanCode: code,
-                        scanType: "pallet", // scanType
+                        scanType: scanType || "pallet", // use detected type or fallback to pallet
                         userCode: gs_userCode,
                     }),
                 });
@@ -199,8 +209,9 @@ export default function PD({ navigation }: any) {
                     if (resultData.isok === "0") {
                         Alert.alert("Error", resultData.retstr || "Scan failed");
                     } else {
+                        Alert.alert("Success", "scan successfully.");
                         const addedQty = parseInt(resultData.qty || "0");
-
+                        
                         const newItem = {
                             id: Date.now().toString(),
                             barcode: resultData.barcode,
@@ -208,7 +219,7 @@ export default function PD({ navigation }: any) {
                             color: resultData.color,
                             qty: resultData.qty,
                         };
-                        
+
 
                         setScannedItems(prev => [newItem, ...prev]);
                         setTotalQty(prev => prev + addedQty);
@@ -297,7 +308,11 @@ export default function PD({ navigation }: any) {
                 </View>
             </View>
 
-            <View style={styles.content}>
+            <ScrollView
+                style={styles.content}
+                contentContainerStyle={{ flexGrow: 1, paddingBottom: verticalScale(20) }}
+                keyboardShouldPersistTaps="handled"
+            >
                 <View style={styles.formCard}>
                     <View style={styles.inputGroup}>
                         <Text style={styles.label}>Inventory Order</Text>
@@ -350,16 +365,32 @@ export default function PD({ navigation }: any) {
                     </View>
 
                     <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Scan Barcode (Pallet/Box/SN)</Text>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: verticalScale(4) }}>
+                            <Text style={styles.label}>Scan Barcode (Pallet/Box/SN)</Text>
+                            <TouchableOpacity
+                                onPress={() => {
+                                    setShowKeyboard(!showKeyboard);
+                                    setTimeout(() => barcodeInputRef.current?.focus(), 100);
+                                }}
+                                style={styles.keyboardToggle}
+                            >
+                                <Text style={styles.keyboardToggleText}>
+                                    {showKeyboard ? "⌨️ Hide Keyboard" : "⌨️ Show Keyboard"}
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
                         <TextInput
                             ref={barcodeInputRef}
                             style={styles.input}
                             value={barcode}
                             onChangeText={setBarcode}
                             placeholder="Scan or enter barcode..."
-                            onSubmitEditing={handleScan}
+                            onSubmitEditing={(e) => handleScan(e.nativeEvent.text)}
                             autoCapitalize="characters"
                             autoCorrect={false}
+                            showSoftInputOnFocus={showKeyboard}
+                            blurOnSubmit={false}
+                            onBlur={ensureFocus}
                         />
                     </View>
                 </View>
@@ -371,14 +402,24 @@ export default function PD({ navigation }: any) {
                 </View>
 
                 {loading && scannedItems.length === 0 ? (
-                    <ActivityIndicator size="large" color="#4F46E5" style={{ marginTop: 40 }} />
+                    <ActivityIndicator size="large" color="#4F46E5" style={{ marginTop: verticalScale(40) }} />
                 ) : (
-                    <FlatList
-                        data={scannedItems}
-                        renderItem={renderItem}
-                        keyExtractor={(item) => item.id}
-                        contentContainerStyle={{ paddingBottom: 20 }}
-                    />
+                    <ScrollView
+                        style={{ height: verticalScale(120) }}
+                        nestedScrollEnabled={true}
+                    >
+                        {scannedItems.length > 0 ? (
+                            scannedItems.map((item) => (
+                                <View key={item.id}>
+                                    {renderItem({ item })}
+                                </View>
+                            ))
+                        ) : (
+                            <View style={{ padding: 20, alignItems: 'center' }}>
+                                <Text style={{ color: '#94A3B8', fontStyle: 'italic' }}>No items scanned yet</Text>
+                            </View>
+                        )}
+                    </ScrollView>
                 )}
 
                 <View style={styles.actions}>
@@ -391,7 +432,7 @@ export default function PD({ navigation }: any) {
                         <Text style={styles.buttonText}>Exit</Text>
                     </TouchableOpacity>
                 </View>
-            </View>
+            </ScrollView>
         </SafeAreaView>
     );
 }
@@ -446,7 +487,16 @@ const styles = StyleSheet.create({
     input: { backgroundColor: "#F1F5F9", height: verticalScale(40), borderRadius: scale(10), paddingHorizontal: scale(12), fontSize: scale(13), color: "#1E293B", fontWeight: "600" },
     tableHeader: { flexDirection: "row", backgroundColor: "#F1F5F9", padding: scale(8), borderRadius: scale(10), marginBottom: verticalScale(6) },
     headerCell: { fontSize: scale(9), fontWeight: "900", color: "#64748B", textAlign: "center", textTransform: "uppercase" },
-    row: { flexDirection: "row", paddingVertical: verticalScale(8), borderBottomWidth: 1, borderBottomColor: "#F1F5F9", backgroundColor: "#FFF", borderRadius: scale(8), marginBottom: verticalScale(2), alignItems: "center" },
+    row: {
+        flexDirection: "row",
+        height: verticalScale(40),
+        borderBottomWidth: 1,
+        borderBottomColor: "#F1F5F9",
+        backgroundColor: "#FFF",
+        borderRadius: scale(8),
+        marginBottom: verticalScale(2),
+        alignItems: "center"
+    },
     cell: { fontSize: scale(10), color: "#334155", textAlign: "center", fontWeight: "600" },
     cellMain: { fontSize: scale(10), color: "#1E293B", fontWeight: "700", textAlign: "center" },
     cellSub: { fontSize: scale(9), color: "#64748B", textAlign: "center" },
@@ -454,5 +504,18 @@ const styles = StyleSheet.create({
     confirmButton: { backgroundColor: "#10B981", padding: verticalScale(12), borderRadius: scale(10), alignItems: "center" },
     exitButton: { backgroundColor: "#EF4444", padding: verticalScale(12), borderRadius: scale(10), alignItems: "center" },
     buttonText: { color: "#FFF", fontWeight: "900", fontSize: scale(13) },
+    keyboardToggle: {
+        backgroundColor: '#F1F5F9',
+        paddingHorizontal: scale(8),
+        paddingVertical: verticalScale(4),
+        borderRadius: scale(6),
+        borderWidth: 1,
+        borderColor: '#CBD5E1',
+    },
+    keyboardToggleText: {
+        fontSize: scale(9),
+        fontWeight: '700',
+        color: '#4F46E5',
+    },
 });
 

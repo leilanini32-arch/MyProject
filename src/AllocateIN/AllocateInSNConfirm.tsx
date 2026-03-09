@@ -67,13 +67,13 @@ export default function AllocateInSNConfirm({ navigation, route }: any) {
         const mapped = result.data.map((item: any, index: number) => ({
           id: index.toString(),
           fxh: item.fxh,
-          SN: item.SN,
+          SN: item.sn,
           model: item.model,
           color: item.color,
           imeiCode1: item.imeiCode1,
           imeiCode2: item.imeiCode2,
           imeiCode3: item.imeiCode3,
-          realdate: item.realdate,
+          realdate: item.realDate,
           orderCode: item.orderCode,
         }));
         setDetails(mapped);

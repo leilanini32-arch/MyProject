@@ -33,8 +33,15 @@ export default function DeliveryFrm({ navigation, route }: any) {
   const [totalQty, setTotalQty] = useState("");
   const [rows, setRows] = useState<RowType[]>([]);
   const [loading, setLoading] = useState(false);
+  const [showKeyboard, setShowKeyboard] = useState(false);
 
   const inputRef = useRef<TextInput>(null);
+
+  const ensureFocus = () => {
+    if (inputRef.current) {
+      inputRef.current.focus();
+    }
+  };
 
   // Equivalent to Frm_Delivery_Load
   useEffect(() => {
@@ -228,7 +235,11 @@ export default function DeliveryFrm({ navigation, route }: any) {
         <Text style={styles.headerSubtitle}>To: {toCkName || "—"}</Text>
       </View>
 
-      <View style={styles.container}>
+      <ScrollView 
+        style={styles.container} 
+        contentContainerStyle={{ flexGrow: 1, paddingBottom: 40 }}
+        keyboardShouldPersistTaps="handled"
+      >
         {/* Entry Card */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
@@ -236,7 +247,20 @@ export default function DeliveryFrm({ navigation, route }: any) {
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Scan Barcode (SN/Box/Pallet)</Text>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+              <Text style={styles.label}>Scan Barcode (SN/Box/Pallet)</Text>
+              <TouchableOpacity 
+                onPress={() => {
+                  setShowKeyboard(!showKeyboard);
+                  setTimeout(() => inputRef.current?.focus(), 100);
+                }}
+                style={styles.keyboardToggle}
+              >
+                <Text style={styles.keyboardToggleText}>
+                  {showKeyboard ? "⌨️ Hide Keyboard" : "⌨️ Show Keyboard"}
+                </Text>
+              </TouchableOpacity>
+            </View>
             <TextInput
               ref={inputRef}
               style={styles.input}
@@ -245,6 +269,9 @@ export default function DeliveryFrm({ navigation, route }: any) {
               onSubmitEditing={handleScan}
               placeholder="Scan here..."
               autoFocus
+              showSoftInputOnFocus={showKeyboard}
+              blurOnSubmit={false}
+              onBlur={ensureFocus}
             />
           </View>
 
@@ -270,7 +297,7 @@ export default function DeliveryFrm({ navigation, route }: any) {
         </View>
 
         {/* Details Card */}
-        <View style={[styles.card, { flex: 1 }]}>
+        <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Text style={styles.cardTitle}>Scan Details</Text>
           </View>
@@ -285,7 +312,10 @@ export default function DeliveryFrm({ navigation, route }: any) {
                 ))}
               </View>
 
-              <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator>
+              <ScrollView 
+                style={{ height: 150 }} 
+                nestedScrollEnabled={true}
+              >
                 {rows.length > 0 ? (
                   rows.map((item, index) => (
                     <View key={index} style={styles.tableDataRow}>
@@ -321,7 +351,7 @@ export default function DeliveryFrm({ navigation, route }: any) {
             <Text style={styles.btnTextSecondary}>Exit</Text>
           </TouchableOpacity>
         </View>
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -370,9 +400,21 @@ const styles = StyleSheet.create({
   rowInputs: { flexDirection: "row", alignItems: "flex-end" },
   tableHeaderRow: { flexDirection: "row", backgroundColor: "#F1F5F9", borderRadius: 8, paddingVertical: 10 },
   headerCell: { width: 100, textAlign: "center", fontSize: 10, fontWeight: "800", color: "#64748B", textTransform: "uppercase" },
-  tableDataRow: { flexDirection: "row", borderBottomWidth: 1, borderBottomColor: "#F1F5F9" },
-  cell: { width: 100, textAlign: "center", paddingVertical: 15, fontSize: 12, color: "#334155", fontWeight: "600" },
-  emptyContainer: { flex: 1, justifyContent: "center", alignItems: "center", paddingTop: 40, width: 400 },
+  tableDataRow: { 
+    flexDirection: "row", 
+    borderBottomWidth: 1, 
+    borderBottomColor: "#F1F5F9",
+    height: 50,
+  },
+  cell: { 
+    width: 100, 
+    textAlign: "center", 
+    paddingVertical: 15, 
+    fontSize: 12, 
+    color: "#334155", 
+    fontWeight: "600" 
+  },
+  emptyContainer: { flex: 1, justifyContent: "center", alignItems: "center", paddingTop: 20, width: 400 },
   emptyText: { color: "#94A3B8", fontStyle: "italic", fontSize: 13 },
   actionContainer: { flexDirection: "row", gap: 12, marginTop: 10 },
   btn: { flex: 1, height: 55, borderRadius: 14, justifyContent: "center", alignItems: "center", elevation: 3 },
@@ -380,4 +422,17 @@ const styles = StyleSheet.create({
   btnSecondary: { backgroundColor: "#FEE2E2", borderWidth: 1, borderColor: "#FECACA" },
   btnText: { color: "#FFFFFF", fontWeight: "800", fontSize: 16 },
   btnTextSecondary: { color: "#EF4444", fontWeight: "800", fontSize: 16 },
+  keyboardToggle: {
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+  },
+  keyboardToggleText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#4F46E5',
+  },
 });

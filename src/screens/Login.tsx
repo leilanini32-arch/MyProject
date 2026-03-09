@@ -60,7 +60,7 @@ const CustomInput = forwardRef<CustomInputRef, any>(
       options = [],
       inputRef,
       onSubmitEditing,
-      showSoftInput = true,
+      showSoftInput = false,
       onBlur,
     },
     ref

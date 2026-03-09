@@ -34,8 +34,15 @@ export default function AllocateInFrm({ navigation, route }: any) {
     const [rows, setRows] = useState<RowType[]>([]);
     const [loading, setLoading] = useState(false);
     const [errorMsg, setErrorMsg] = useState("");
+    const [showKeyboard, setShowKeyboard] = useState(false);
 
     const snRef = useRef<TextInput>(null);
+
+    const ensureFocus = () => {
+        if (snRef.current) {
+            snRef.current.focus();
+        }
+    };
 
     const checkAllocate = useCallback(async () => {
         if (!allocateCode) return;
@@ -215,7 +222,20 @@ export default function AllocateInFrm({ navigation, route }: any) {
                     </View>
 
                     <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Scan Barcode (Pallet/Box/SN)</Text>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                            <Text style={styles.label}>Scan Barcode (Pallet/Box/SN)</Text>
+                            <TouchableOpacity 
+                                onPress={() => {
+                                    setShowKeyboard(!showKeyboard);
+                                    setTimeout(() => snRef.current?.focus(), 100);
+                                }}
+                                style={styles.keyboardToggle}
+                            >
+                                <Text style={styles.keyboardToggleText}>
+                                    {showKeyboard ? "⌨️ Hide Keyboard" : "⌨️ Show Keyboard"}
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
                         <TextInput
                             ref={snRef}
                             style={styles.input}
@@ -224,6 +244,9 @@ export default function AllocateInFrm({ navigation, route }: any) {
                             onSubmitEditing={handleSnSubmit}
                             placeholder="Scan here..."
                             autoCapitalize="characters"
+                            showSoftInputOnFocus={showKeyboard}
+                            blurOnSubmit={false}
+                            onBlur={ensureFocus}
                         />
                     </View>
                     {errorMsg ? <Text style={styles.errorText}>{errorMsg}</Text> : null}
@@ -282,4 +305,18 @@ const styles = StyleSheet.create({
     exitButton: { flex: 1, backgroundColor: "#FEE2E2", padding: 16, borderRadius: 12, alignItems: "center", borderWidth: 1, borderColor: "#FECACA" },
     exitButtonText: { color: "#EF4444", fontWeight: "900", fontSize: 15 },
     errorText: { color: "#EF4444", fontSize: 12, marginTop: 8, fontWeight: "700" },
+    keyboardToggle: {
+        backgroundColor: '#F1F5F9',
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 6,
+        borderWidth: 1,
+        borderColor: '#CBD5E1',
+        width:70,
+    },
+    keyboardToggleText: {
+        fontSize: 10,
+        fontWeight: '700',
+        color: '#4F46E5',
+    },
 });

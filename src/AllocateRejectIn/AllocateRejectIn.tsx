@@ -6,11 +6,11 @@ import {
     SafeAreaView,
     TextInput,
     TouchableOpacity,
-    FlatList,
     ActivityIndicator,
     StatusBar,
     Alert,
     Keyboard,
+    ScrollView,
 } from "react-native";
 import { useGlobal } from "../../GlobalContext.tsx";
 
@@ -35,7 +35,14 @@ export default function AllocateRejectIn({ navigation }: any) {
     const [loading, setLoading] = useState(false);
     const [boxList, setBoxList] = useState<BoxItem[]>([]);
     const [allocateCode, setAllocateCode] = useState("");
+    const [showKeyboard, setShowKeyboard] = useState(false);
     const snInputRef = useRef<TextInput>(null);
+
+    const ensureFocus = () => {
+        if (snInputRef.current) {
+            snInputRef.current.focus();
+        }
+    };
 
     useEffect(() => {
         snInputRef.current?.focus();
@@ -191,9 +198,26 @@ export default function AllocateRejectIn({ navigation }: any) {
                 </View>
             </View>
 
-            <View style={styles.content}>
+            <ScrollView 
+                style={styles.content} 
+                contentContainerStyle={{ flexGrow: 1, paddingBottom: 20 }}
+                keyboardShouldPersistTaps="handled"
+            >
                 <View style={styles.inputSection}>
-                    <Text style={styles.inputLabel}>Scan Pallet / Box / SN</Text>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                        <Text style={styles.inputLabel}>Scan Pallet / Box / SN</Text>
+                        <TouchableOpacity 
+                            onPress={() => {
+                                setShowKeyboard(!showKeyboard);
+                                setTimeout(() => snInputRef.current?.focus(), 100);
+                            }}
+                            style={styles.keyboardToggle}
+                        >
+                            <Text style={styles.keyboardToggleText}>
+                                {showKeyboard ? "⌨️ Hide Keyboard" : "⌨️ Show Keyboard"}
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
                     <TextInput
                         ref={snInputRef}
                         style={styles.input}
@@ -203,6 +227,9 @@ export default function AllocateRejectIn({ navigation }: any) {
                         onSubmitEditing={handleScan}
                         autoCapitalize="characters"
                         autoCorrect={false}
+                        showSoftInputOnFocus={showKeyboard}
+                        blurOnSubmit={false}
+                        onBlur={ensureFocus}
                     />
                 </View>
 
@@ -216,12 +243,13 @@ export default function AllocateRejectIn({ navigation }: any) {
                 {loading && boxList.length === 0 ? (
                     <ActivityIndicator size="large" color="#4F46E5" style={{ marginTop: 40 }} />
                 ) : (
-                    <FlatList
-                        data={boxList}
-                        renderItem={renderItem}
-                        keyExtractor={(item) => item.id}
-                        contentContainerStyle={{ paddingBottom: 20 }}
-                    />
+                    <View>
+                        {boxList.length === 0 ? (
+                            <Text style={styles.emptyText}>Waiting for scanning...</Text>
+                        ) : (
+                            boxList.map((item) => renderItem({ item }))
+                        )}
+                    </View>
                 )}
 
                 <View style={styles.actions}>
@@ -244,7 +272,7 @@ export default function AllocateRejectIn({ navigation }: any) {
                         <Text style={styles.exitButtonText}>Exit</Text>
                     </TouchableOpacity>
                 </View>
-            </View>
+            </ScrollView>
         </SafeAreaView>
     );
 }
@@ -272,4 +300,18 @@ const styles = StyleSheet.create({
     detailButtonText: { color: "#FFF", fontWeight: "900" },
     exitButton: { flex: 1, backgroundColor: "#EF4444", padding: 16, borderRadius: 12, alignItems: "center" },
     exitButtonText: { color: "#FFF", fontWeight: "900" },
+    emptyText: { textAlign: "center", padding: 40, color: "#94A3B8", fontStyle: "italic" },
+    keyboardToggle: {
+        backgroundColor: '#F1F5F9',
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 6,
+        borderWidth: 1,
+        borderColor: '#CBD5E1',
+    },
+    keyboardToggleText: {
+        fontSize: 10,
+        fontWeight: '700',
+        color: '#4F46E5',
+    },
 });

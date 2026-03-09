@@ -11,7 +11,7 @@ import {
     StatusBar,
     Alert,
 } from "react-native";
-import { useGlobal } from "../../GlobalContext.tsx";
+import { useGlobal } from "../../GlobalContext";
 
 interface PalletBoxItem {
     id: string;
@@ -34,12 +34,19 @@ export default function PalletSearch({ navigation }: any) {
     const [boxList, setBoxList] = useState<PalletBoxItem[]>([]);
     const [totalQty, setTotalQty] = useState(0);
     const [currentPallet, setCurrentPallet] = useState("");
+    const [showKeyboard, setShowKeyboard] = useState(false);
 
     const snInputRef = useRef<TextInput>(null);
 
     useEffect(() => {
         snInputRef.current?.focus();
     }, []);
+
+    const ensureFocus = () => {
+        if (!showKeyboard) {
+            snInputRef.current?.focus();
+        }
+    };
 
     const handleScan = async () => {
         if (!sn.trim()) return;
@@ -177,7 +184,20 @@ export default function PalletSearch({ navigation }: any) {
 
             <View style={styles.content}>
                 <View style={styles.inputSection}>
-                    <Text style={styles.inputLabel}>Scan Pallet / Box / SN</Text>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                        <Text style={styles.inputLabel}>Scan Pallet / Box / SN</Text>
+                        <TouchableOpacity
+                            onPress={() => {
+                                setShowKeyboard(!showKeyboard);
+                                setTimeout(() => snInputRef.current?.focus(), 100);
+                            }}
+                            style={styles.keyboardToggle}
+                        >
+                            <Text style={styles.keyboardToggleText}>
+                                {showKeyboard ? "⌨️ Hide Keyboard" : "⌨️ Show Keyboard"}
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
                     <TextInput
                         ref={snInputRef}
                         style={styles.input}
@@ -187,6 +207,9 @@ export default function PalletSearch({ navigation }: any) {
                         onSubmitEditing={handleScan}
                         autoCapitalize="characters"
                         autoCorrect={false}
+                        showSoftInputOnFocus={showKeyboard}
+                        blurOnSubmit={false}
+                        onBlur={ensureFocus}
                     />
                 </View>
 
@@ -249,4 +272,17 @@ const styles = StyleSheet.create({
     actions: { marginTop: 16 },
     exitButton: { backgroundColor: "#EF4444", padding: 16, borderRadius: 12, alignItems: "center" },
     exitButtonText: { color: "#FFF", fontWeight: "900" },
+    keyboardToggle: {
+        backgroundColor: '#F1F5F9',
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: '#CBD5E1',
+    },
+    keyboardToggleText: {
+        fontSize: 10,
+        fontWeight: '700',
+        color: '#4F46E5',
+    },
 });
