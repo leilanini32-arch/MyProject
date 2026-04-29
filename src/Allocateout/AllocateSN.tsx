@@ -1,16 +1,21 @@
 import React, { useState, useEffect, useMemo } from "react";
+import { SafeAreaView } from 'react-native-safe-area-context';
 import {
     View,
     Text,
     FlatList,
+    ScrollView,
     TouchableOpacity,
     StyleSheet,
     Alert,
     StatusBar,
     ActivityIndicator,
     ListRenderItem,
+    Image,
+    Dimensions,
 } from "react-native";
 import { useGlobal } from "../../GlobalContext.tsx";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 interface SNDetail {
     id: string;
@@ -27,24 +32,40 @@ interface SNDetail {
 export default function AllocateSN({ navigation, route }: any) {
     const { allocateCode, palletCode: initialPalletCode, boxCode: initialBoxCode } = route.params || {};
     const global = useGlobal();
-    const { gsURL, gs_factoryCode, gs_wareCode } = global;
+    const { gsURL, gs_factoryCode, gs_wareCode, gs_userName,operateUserCode, operateUserName, operateWareHouseCode, operateRandomNumber, operateSign, operateVersion, } = global;
     const BASE_URL = gsURL;
+    const [token, setToken] = useState("");
 
     const [loading, setLoading] = useState(false);
     const [items, setItems] = useState<SNDetail[]>([]);
     const [title, setTitle] = useState("");
 
+
     useEffect(() => {
-        fetchSNDetails();
+        const loadToken = async () => {
+            const t = await AsyncStorage.getItem("userToken");
+            console.log("TOKEN IN Allocateout", t);
+            if (t) setToken(t);
+        };
+
+        loadToken();
     }, []);
+
+
+    useEffect(() => {
+        if (token) {
+            fetchSNDetails();
+        }
+    }, [token]);
 
     const fetchSNDetails = async () => {
         setLoading(true);
         try {
             const response = await fetch(`${BASE_URL}/api/AllocatePalletSN`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, },
                 body: JSON.stringify({
+                    operateUserCode, operateUserName, operateWareHouseCode, operateRandomNumber, operateSign, operateVersion,
                     FactoryCode: gs_factoryCode,
                     WareHouseCode: gs_wareCode,
                     AllocateCode: allocateCode,
@@ -53,7 +74,22 @@ export default function AllocateSN({ navigation, route }: any) {
                 })
             });
 
+            if (response.status === 401) {
+                Alert.alert("Unauthorized", "Token expired or invalid.");
+                return;
+            }
+
+            if (response.status === 403) {
+                Alert.alert("Access Denied", "You do not have permission.");
+                return;
+            }
+
             const result = await response.json();
+            if (result.code === 500) {
+                Alert.alert("Error", result.message);
+                navigation.goBack();
+                return;
+            }
             console.log("allocatesn ", result)
             if (result.message === 'success' && result.data && result.data.length > 0) {
                 const mappedData = result.data.map((row: any, index: number) => ({
@@ -82,193 +118,154 @@ export default function AllocateSN({ navigation, route }: any) {
     };
 
     const renderItem: ListRenderItem<SNDetail> = ({ item, index }) => (
-        <View
-            style={[
-                styles.row,
-                index % 2 === 0 ? styles.rowEven : styles.rowOdd,
-            ]}
-        >
-            <Text style={[styles.cell, styles.cellNo]}>{index + 1}</Text>
-            <Text style={[styles.cell, styles.cellSN]}>{item.SN}</Text>
-            <Text style={[styles.cell, styles.cellIMEI]}>{item.imeiCode1}</Text>
-            <Text style={[styles.cell, styles.cellDate]}>{item.createDate}</Text>
+        <View style={styles.row}>
+            <Text style={[styles.cell, { width: 40 }]}>{index + 1}</Text>
+            <Text style={[styles.cell, { width: 150 }]}>{item.SN}</Text>
+            <Text style={[styles.cell, { width: 120 }]}>{item.imeiCode1}</Text>
+            <Text style={[styles.cell, { width: 120 }]}>{item.imeiCode2}</Text>
+            <Text style={[styles.cell, { width: 120 }]}>{item.imeiCode3}</Text>
+            <Text style={[styles.cell, { width: 150 }]}>{item.createDate}</Text>
         </View>
     );
 
+    const handleReturn = () => {
+        navigation.goBack();
+    };
+
     return (
-        <View style={styles.container}>
-            <StatusBar barStyle="dark-content" />
+        <SafeAreaView style={styles.container}>
+            <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
 
             <View style={styles.header}>
-                <Text style={styles.title}>SN Details</Text>
-                <Text style={styles.subtitle}>Pallet: {initialPalletCode} | Box: {initialBoxCode}</Text>
-                <Text style={styles.modelText}>{title}</Text>
-            </View>
+                <View style={styles.headerLeft}>
+                    <TouchableOpacity onPress={handleReturn} activeOpacity={0.7}>
+                        <Image
+                            source={require("../../assets/logo/left.png")}
+                            style={styles.returnLogo}
+                            resizeMode="contain"
+                        />
+                    </TouchableOpacity>
+                    <Text style={styles.headerTitle}>SN Details</Text>
+                </View>
 
-            <View style={styles.summaryCard}>
-                <View>
-                    <Text style={styles.summaryLabel}>Total Units</Text>
-                    <Text style={styles.summaryValue}>{items.length}</Text>
+                <View style={styles.headerRight}>
+                    <Text style={styles.userNameText}>{gs_userName}</Text>
                 </View>
             </View>
 
-            <View style={styles.tableHeader}>
-                <Text style={[styles.headerCell, styles.cellNo]}>No</Text>
-                <Text style={[styles.headerCell, styles.cellSN]}>SN</Text>
-                <Text style={[styles.headerCell, styles.cellIMEI]}>IMEI 1</Text>
-                <Text style={[styles.headerCell, styles.cellDate]}>Date</Text>
-            </View>
+            <View style={styles.content}>
+                <View style={styles.statsCard}>
+                    {allocateCode && allocateCode !== "" && (
+                        <>
+                            <View style={styles.statBox}>
+                                <Text style={styles.statLabel}>Pallet </Text>
+                                <Text style={styles.statValue}>{initialPalletCode}</Text>
+                            </View>
 
-            <FlatList
-                data={items}
-                keyExtractor={(item) => item.id}
-                renderItem={renderItem}
-                contentContainerStyle={styles.listContent}
-                ListEmptyComponent={
-                    <View style={styles.emptyContainer}>
-                        {loading ? <ActivityIndicator color="#2563eb" /> : <Text style={styles.emptyText}>No data available</Text>}
+                            <View style={styles.statBox}>
+                                <Text style={styles.statLabel}>Box</Text>
+                                <Text style={styles.statValue}>{initialBoxCode}</Text>
+                            </View>
+                        </>
+                    )}
+
+                    <View style={styles.statBox}>
+                        <Text style={styles.statLabel}>Total QTY</Text>
+                        <Text style={styles.statValue}>{items.length}</Text>
                     </View>
-                }
-            />
+                </View>
 
-            <View style={styles.actionPanel}>
-                <TouchableOpacity
-                    style={styles.exitBtn}
-                    onPress={() => navigation.goBack()}
-                >
-                    <Text style={styles.exitText}>Close Terminal</Text>
-                </TouchableOpacity>
+                <ScrollView horizontal showsHorizontalScrollIndicator={true}>
+                    <View style={{ width: 700 }}>
+                        <FlatList
+                            data={items}
+                            keyExtractor={(item) => item.id}
+                            renderItem={renderItem}
+                            ListHeaderComponent={
+                                <View style={styles.tableHeader}>
+                                    <Text style={[styles.headerCell, { width: 40 }]}>No</Text>
+                                    <Text style={[styles.headerCell, { width: 150 }]}>SN</Text>
+                                    <Text style={[styles.headerCell, { width: 120 }]}>IMEI 1</Text>
+                                    <Text style={[styles.headerCell, { width: 120 }]}>IMEI 2</Text>
+                                    <Text style={[styles.headerCell, { width: 120 }]}>IMEI 3</Text>
+                                    <Text style={[styles.headerCell, { width: 150 }]}>Date</Text>
+                                </View>
+                            }
+                            stickyHeaderIndices={[0]}
+                            ListEmptyComponent={
+                                <View style={styles.emptyContainer}>
+                                    {loading ? <ActivityIndicator color="#4F46E5" /> : <Text style={styles.emptyText}>No data available</Text>}
+                                </View>
+                            }
+                        />
+                    </View>
+                </ScrollView>
             </View>
-        </View>
+        </SafeAreaView>
     );
 }
 
+const { width, height } = Dimensions.get("window");
+const isSmallDevice = width < 360;
+const scale = (size: number) => (width / 375) * size;
+
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#f1f5f9',
-    },
+    container: { flex: 1, backgroundColor: "#F8FAFC" },
     header: {
-        paddingHorizontal: 20,
-        paddingTop: 20,
-        paddingBottom: 15,
+        backgroundColor: "#0052cc",
+        paddingHorizontal: width * 0.05,
+        height: scale(56),
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        elevation: 4,
     },
-    title: {
-        fontSize: 22,
-        fontWeight: '900',
-        color: '#0f172a',
-        letterSpacing: -0.5,
+    headerLeft: {
+        flexDirection: "row",
+        alignItems: "center",
     },
-    subtitle: {
-        fontSize: 14,
-        color: '#64748b',
-        fontWeight: '600',
-        marginTop: 2,
+    returnLogo: {
+        width: scale(24),
+        height: scale(24),
+        marginRight: 10,
+        tintColor: "#FFFFFF",
     },
-    modelText: {
-        fontSize: 13,
-        color: '#2563eb',
-        fontWeight: '700',
-        marginTop: 4,
+    headerTitle: {
+        color: "#FFFFFF",
+        fontSize: isSmallDevice ? scale(14) : scale(16),
+        fontWeight: "900",
     },
-    summaryCard: {
-        backgroundColor: '#fff',
-        marginHorizontal: 20,
-        padding: 15,
-        borderRadius: 16,
-        alignItems: 'center',
-        marginBottom: 20,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 10,
-        elevation: 3,
+    headerRight: {
+        flexDirection: "row",
+        alignItems: "center",
     },
-    summaryLabel: {
-        fontSize: 11,
-        color: '#94a3b8',
-        textTransform: 'uppercase',
-        fontWeight: '800',
-        letterSpacing: 1,
-        marginBottom: 4,
+    userNameText: {
+        color: "#FFFFFF",
+        fontSize: scale(12),
+        fontWeight: "700",
+        marginRight: 1,
     },
-    summaryValue: {
-        fontSize: 20,
-        fontWeight: '800',
-        color: '#1e293b',
+    content: { flex: 1, padding: 16 },
+    statsCard: { paddingBottom: 16, gap: 10 },
+    statBox: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        backgroundColor: "#0052cc",
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 12,
+        elevation: 2,
+        borderWidth: 1,
+        borderColor: "#E2E8F0",
+        height: 35,
     },
-    tableHeader: {
-        flexDirection: 'row',
-        backgroundColor: '#1e293b',
-        marginHorizontal: 10,
-        borderTopLeftRadius: 12,
-        borderTopRightRadius: 12,
-        paddingVertical: 12,
-        paddingHorizontal: 10,
-    },
-    headerCell: {
-        color: '#94a3b8',
-        fontSize: 12,
-        fontWeight: '800',
-        textTransform: 'uppercase',
-        textAlign: 'center',
-    },
-    listContent: {
-        backgroundColor: '#fff',
-        marginHorizontal: 10,
-        borderBottomLeftRadius: 12,
-        borderBottomRightRadius: 12,
-        minHeight: 100,
-    },
-    row: {
-        flexDirection: 'row',
-        paddingVertical: 14,
-        paddingHorizontal: 10,
-        alignItems: 'center',
-        borderBottomWidth: 1,
-        borderBottomColor: '#f1f5f9',
-    },
-    rowEven: { backgroundColor: '#fff' },
-    rowOdd: { backgroundColor: '#f8fafc' },
-    cell: {
-        fontSize: 11,
-        color: '#334155',
-        fontWeight: '600',
-        textAlign: 'center',
-    },
-    cellNo: { flex: 0.5 },
-    cellSN: {
-        flex: 2,
-        textAlign: 'left',
-        paddingLeft: 8,
-        color: '#2563eb',
-        fontWeight: '800',
-    },
-    cellIMEI: { flex: 1.5 },
-    cellDate: { flex: 1.5 },
-    emptyContainer: {
-        padding: 40,
-        alignItems: 'center',
-    },
-    emptyText: {
-        color: '#94a3b8',
-        fontWeight: '600',
-        fontSize: 14,
-    },
-    actionPanel: {
-        padding: 20,
-        backgroundColor: '#fff',
-        borderTopWidth: 1,
-        borderTopColor: '#e2e8f0',
-    },
-    exitBtn: {
-        alignSelf: 'center',
-        padding: 10,
-    },
-    exitText: {
-        color: '#94a3b8',
-        fontWeight: '700',
-        fontSize: 14,
-        textDecorationLine: 'underline',
-    },
+    statLabel: { color: "#FFFFFF", fontSize: 11, fontWeight: "700", textTransform: "uppercase" },
+    statValue: { color: "#FFFFFF", fontSize: 12, fontWeight: "800" },
+    tableHeader: { flexDirection: "row", backgroundColor: "#0052cc", paddingVertical: 10, borderRadius: 8, marginBottom: 8 },
+    headerCell: { fontSize: 10, fontWeight: "900", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
+    row: { flexDirection: "row", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#F1F5F9", backgroundColor: "#FFF", borderRadius: 8, marginBottom: 4 },
+    cell: { fontSize: 11, color: "#334155", textAlign: "center", fontWeight: "600" },
+    emptyContainer: { padding: 40, alignItems: "center" },
+    emptyText: { color: "#94A3B8", fontWeight: "600", fontSize: 14 },
 });

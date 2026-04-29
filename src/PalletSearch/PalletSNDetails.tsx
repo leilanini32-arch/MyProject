@@ -1,16 +1,20 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { SafeAreaView } from 'react-native-safe-area-context';
 import {
     View,
     Text,
     StyleSheet,
-    SafeAreaView,
     TouchableOpacity,
     FlatList,
     ActivityIndicator,
     StatusBar,
     Alert,
+    Image,
+    Dimensions,
+    ScrollView,
 } from "react-native";
 import { useGlobal } from "../../GlobalContext.tsx";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 interface SNDetail {
     id: string;
@@ -28,21 +32,36 @@ interface SNDetail {
 export default function PalletSNDetails({ navigation, route }: any) {
     const { palletCode, boxCode } = route.params || {};
     const global = useGlobal();
-    const { gsURL, gs_factoryCode, gs_wareCode } = global;
+    const { gsURL, gs_factoryCode, gs_wareCode, gs_userName ,
+        operateUserCode, operateUserName, operateWareHouseCode, operateRandomNumber, operateSign, operateVersion,
+    } = global;
     const BASE_URL = gsURL;
+    const [token, setToken] = useState("");
 
     const [loading, setLoading] = useState(true);
     const [details, setDetails] = useState<SNDetail[]>([]);
-    const [title, setTitle] = useState("");
     const [qtyTotal, setQtyTotal] = useState(0);
+    const [model, setModel] = useState("");
+    const [color, setColor] = useState("");
+
+    useEffect(() => {
+        const loadToken = async () => {
+            const t = await AsyncStorage.getItem("userToken");
+            console.log("TOKEN IN Allocateout", t);
+            if (t) setToken(t);
+        };
+
+        loadToken();
+    }, []);
 
     const fetchDetails = useCallback(async () => {
         setLoading(true);
         try {
             const response = await fetch(`${BASE_URL}/api/DeliveryPalletSNConfirm`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, },
                 body: JSON.stringify({
+                    operateUserCode, operateUserName, operateWareHouseCode, operateRandomNumber, operateSign, operateVersion,
                     factoryCode: gs_factoryCode,
                     fromWareHouseCode: gs_wareCode,
                     palletCode: palletCode,
@@ -51,12 +70,27 @@ export default function PalletSNDetails({ navigation, route }: any) {
                     scanType: "pallet",
                 }),
             });
+
+            if (response.status === 401) {
+                Alert.alert("Unauthorized", "Token expired or invalid.");
+                return;
+            }
+
+            if (response.status === 403) {
+                Alert.alert("Access Denied", "You do not have permission.");
+                return;
+            }
             const result = await response.json();
-            console.log("palletSNsearche",result);
+
+            if (result.code === 500) {
+                Alert.alert("Error", result.message);
+                navigation.goBack();
+                return;
+            }
+            console.log("palletSNsearche", result);
             if (result.message === 'success' && result.data && result.data.length > 0) {
-                let fmodel = result.data[0].model || "";
-                let fcolor = result.data[0].color || "";
-                setTitle(`Pallet: ${palletCode} Box: ${boxCode} | ${fmodel} ${fcolor}`);
+                setModel(result.data[0].model || "");
+                setColor(result.data[0].color || "");
 
                 const mapped = result.data.map((item: any, index: number) => ({
                     id: index.toString(),
@@ -82,74 +116,142 @@ export default function PalletSNDetails({ navigation, route }: any) {
         } finally {
             setLoading(false);
         }
-    }, [palletCode, boxCode, gs_factoryCode, gs_wareCode, BASE_URL, navigation]);
+    }, [palletCode, boxCode, gs_factoryCode, gs_wareCode, BASE_URL, token, navigation]);
 
     useEffect(() => {
-        fetchDetails();
-    }, [fetchDetails]);
+        if (token) {
+            fetchDetails();
+        }
+    }, [fetchDetails, token]);
 
     const renderItem = ({ item }: { item: SNDetail }) => (
-        <View style={styles.row}>
-            <Text style={[styles.cell, { flex: 0.5 }]}>{item.fxh}</Text>
-            <Text style={[styles.cell, { flex: 1.5 }]}>{item.SN}</Text>
-            <Text style={[styles.cell, { flex: 1.2 }]}>{item.imeiCode1}</Text>
-            <Text style={[styles.cell, { flex: 1.2 }]}>{item.imeiCode2}</Text>
-            <Text style={[styles.cell, { flex: 1.2 }]}>{item.imeiCode3}</Text>
-            <Text style={[styles.cell, { flex: 1.2 }]}>{item.realdate}</Text>
+        <View style={styles.tableRow}>
+            <Text style={[styles.cell, { width: 50 }]}>{item.fxh}</Text>
+            <Text style={[styles.cell, { width: 150 }]}>{item.SN}</Text>
+            <Text style={[styles.cell, { width: 120 }]}>{item.imeiCode1}</Text>
+            <Text style={[styles.cell, { width: 120 }]}>{item.imeiCode2}</Text>
+            <Text style={[styles.cell, { width: 120 }]}>{item.imeiCode3}</Text>
+            <Text style={[styles.cell, { width: 120 }]}>{item.orderCode}</Text>
+            <Text style={[styles.cell, { width: 120 }]}>{item.realdate}</Text>
         </View>
     );
 
     return (
         <SafeAreaView style={styles.container}>
-            <StatusBar barStyle="light-content" backgroundColor="#1E1B4B" />
+            <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
             <View style={styles.header}>
-                <Text style={styles.headerTitle}>SN Details</Text>
-                <Text style={styles.headerSubtitle}>{title}</Text>
-                <Text style={styles.headerSubtitle}>Total Qty: {qtyTotal}</Text>
-            </View>
-
-            <View style={styles.content}>
-                <View style={styles.tableHeader}>
-                    <Text style={[styles.headerCell, { flex: 0.5 }]}>FXH</Text>
-                    <Text style={[styles.headerCell, { flex: 1.5 }]}>SN</Text>
-                    <Text style={[styles.headerCell, { flex: 1.2 }]}>IMEI1</Text>
-                    <Text style={[styles.headerCell, { flex: 1.2 }]}>IMEI2</Text>
-                    <Text style={[styles.headerCell, { flex: 1.2 }]}>IMEI3</Text>
-                    <Text style={[styles.headerCell, { flex: 1.2 }]}>Date</Text>
-                </View>
-
-                {loading ? (
-                    <ActivityIndicator size="large" color="#4F46E5" style={{ marginTop: 40 }} />
-                ) : (
-                    <FlatList
-                        data={details}
-                        renderItem={renderItem}
-                        keyExtractor={(item) => item.id}
-                        contentContainerStyle={{ paddingBottom: 20 }}
-                    />
-                )}
-
-                <View style={styles.actions}>
-                    <TouchableOpacity style={styles.exitButton} onPress={() => navigation.goBack()}>
-                        <Text style={styles.exitButtonText}>Close</Text>
+                <View style={styles.headerLeft}>
+                    <TouchableOpacity onPress={() => navigation.goBack()} activeOpacity={0.7}>
+                        <Image
+                            source={require("../../assets/logo/left.png")}
+                            style={styles.returnLogo}
+                            resizeMode="contain"
+                        />
                     </TouchableOpacity>
+                    <Text style={styles.headerTitle}>SN Details</Text>
+                </View>
+                <View style={styles.headerRight}>
+                    <Text style={styles.userNameText}>{gs_userName}</Text>
                 </View>
             </View>
+
+            <View style={styles.statsCard}>
+                <View style={styles.statBox}>
+                    <Text style={styles.statLabel}>Pallet</Text>
+                    <Text style={styles.statValue}>{palletCode}</Text>
+                </View>
+                <View style={styles.statBox}>
+                    <Text style={styles.statLabel}>Total Qty</Text>
+                    <Text style={styles.statValue}>{qtyTotal}</Text>
+                </View>
+            </View>
+
+            <View style={styles.tableCard}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={true}>
+                    <View>
+                        <View style={styles.tableHeader}>
+                            <Text style={[styles.headerCell, { width: 50 }]}>No</Text>
+                            <Text style={[styles.headerCell, { width: 150 }]}>SN</Text>
+                            <Text style={[styles.headerCell, { width: 120 }]}>IMEI1</Text>
+                            <Text style={[styles.headerCell, { width: 120 }]}>IMEI2</Text>
+                            <Text style={[styles.headerCell, { width: 120 }]}>IMEI3</Text>
+                            <Text style={[styles.headerCell, { width: 120 }]}>Order</Text>
+                            <Text style={[styles.headerCell, { width: 120 }]}>Date</Text>
+                        </View>
+
+                        {loading ? (
+                            <ActivityIndicator size="large" color="#0052cc" style={{ marginTop: 40 }} />
+                        ) : (
+                            <FlatList
+                                data={details}
+                                renderItem={renderItem}
+                                keyExtractor={(item) => item.id}
+                                contentContainerStyle={{ paddingBottom: 20 }}
+                                scrollEnabled={false}
+                            />
+                        )}
+                    </View>
+                </ScrollView>
+            </View>
+
         </SafeAreaView>
     );
 }
 
+const { width } = Dimensions.get("window");
+const isSmallDevice = width < 360;
+const scale = (size: number) => (width / 375) * size;
+
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: "#F8FAFC" },
-    header: { backgroundColor: "#1E1B4B", padding: 20, borderBottomLeftRadius: 24, borderBottomRightRadius: 24 },
-    headerTitle: { color: "#FFF", fontSize: 18, fontWeight: "900" },
-    headerSubtitle: { color: "#A5B4FC", fontSize: 12, marginTop: 4 },
-    content: { flex: 1, padding: 16 },
-    tableHeader: { flexDirection: "row", backgroundColor: "#F1F5F9", padding: 12, borderRadius: 10, marginBottom: 8 },
-    headerCell: { fontSize: 10, fontWeight: "900", color: "#64748B", textAlign: "center", textTransform: "uppercase" },
-    row: { flexDirection: "row", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#F1F5F9", backgroundColor: "#FFF", borderRadius: 8, marginBottom: 4 },
+    header: {
+        backgroundColor: "#0052cc",
+        paddingHorizontal: width * 0.05,
+        height: scale(56),
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        elevation: 4,
+    },
+    headerLeft: { flexDirection: "row", alignItems: "center" },
+    returnLogo: { width: scale(24), height: scale(24), marginRight: 10, tintColor: "#FFFFFF" },
+    headerTitle: { color: "#FFFFFF", fontSize: isSmallDevice ? scale(14) : scale(16), fontWeight: "900" },
+    headerRight: { flexDirection: "row", alignItems: "center" },
+    userNameText: { color: "#FFFFFF", fontSize: scale(12), fontWeight: "700", marginRight: 1 },
+    statsCard: { padding: 16, gap: 10 },
+    statBox: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        backgroundColor: "#0052cc",
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 12,
+        elevation: 2,
+        borderWidth: 1,
+        borderColor: "#E2E8F0"
+    },
+    statLabel: { color: "#FFFFFF", fontSize: 10, fontWeight: "700", textTransform: "uppercase" },
+    statValue: { color: "#FFFFFF", fontSize: 11, fontWeight: "800" },
+    modelInfoCard: {
+        backgroundColor: "#FFF",
+        padding: 12,
+        borderRadius: 12,
+        marginHorizontal: 16,
+        marginBottom: 16,
+        elevation: 2,
+        borderWidth: 1,
+        borderColor: "#E2E8F0"
+    },
+    modelInfoLabel: { fontSize: 10, fontWeight: "700", color: "#64748B", marginBottom: 4, textTransform: "uppercase" },
+    modelInfoValue: { fontSize: 13, color: "#1E293B", fontWeight: "700" },
+    tableCard: { flex: 1, backgroundColor: "#FFF", marginHorizontal: 16, borderRadius: 16, overflow: "hidden", elevation: 2, borderWidth: 1, borderColor: "#E2E8F0", marginBottom: 16 },
+    tableHeader: { flexDirection: "row", backgroundColor: "#0052cc", paddingVertical: 10 },
+    headerCell: { fontSize: 10, fontWeight: "800", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
+    tableRow: { flexDirection: "row", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#F1F5F9", alignItems: "center" },
     cell: { fontSize: 11, color: "#334155", textAlign: "center", fontWeight: "600" },
-    actions: { marginTop: 16 },
-    exitButton: { backgroundColor: "#EF4444", padding: 16, borderRadius: 12, alignItems: "center" },
-    exitButtonText: { color: "#FFF", fontWeight: "900" },
+    footer: { padding: 16, borderTopWidth: 1, borderTopColor: '#e2e8f0' },
+    actionBtn: { height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+    btnSecondary: { backgroundColor: '#f1f5f9', borderWidth: 1, borderColor: '#e2e8f0' },
+    btnTextSecondary: { color: '#475569', fontSize: 15, fontWeight: '700' },
 });

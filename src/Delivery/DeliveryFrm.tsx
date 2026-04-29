@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
+import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   View,
   Text,
@@ -6,12 +7,15 @@ import {
   ScrollView,
   TouchableOpacity,
   StyleSheet,
-  SafeAreaView,
   StatusBar,
   Alert,
   ActivityIndicator,
+  Image,
+  Dimensions,
+  DeviceEventEmitter,
 } from "react-native";
 import { useGlobal } from "../../GlobalContext.tsx";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 type RowType = {
   boxCode: string;
@@ -23,9 +27,10 @@ type RowType = {
 
 
 export default function DeliveryFrm({ navigation, route }: any) {
-  const { gsURL, setgs_gsURL } = useGlobal();
+  const { gsURL, setgs_gsURL ,operateUserCode, operateUserName, operateWareHouseCode, operateRandomNumber, operateSign, operateVersion,} = useGlobal();
   const BASE_URL = gsURL;
   const { deliveryCode } = route.params || { deliveryCode: "" };
+  const [token, setToken] = useState("");
 
   const global = useGlobal();
   const [barcode, setBarcode] = useState("");
@@ -35,6 +40,7 @@ export default function DeliveryFrm({ navigation, route }: any) {
   const [loading, setLoading] = useState(false);
   const [showKeyboard, setShowKeyboard] = useState(false);
 
+
   const inputRef = useRef<TextInput>(null);
 
   const ensureFocus = () => {
@@ -43,14 +49,26 @@ export default function DeliveryFrm({ navigation, route }: any) {
     }
   };
 
+  useEffect(() => {
+    const loadToken = async () => {
+      const t = await AsyncStorage.getItem("userToken");
+      console.log("TOKEN IN delivery", t);
+      if (t) setToken(t);
+    };
+
+    loadToken();
+  }, []);
+
   // Equivalent to Frm_Delivery_Load
   useEffect(() => {
-    if (deliveryCode) {
-      deliveryDeal(deliveryCode);
+    if (token) {
+      if (deliveryCode) {
+        deliveryDeal(deliveryCode);
+      }
+      const timer = setTimeout(() => inputRef.current?.focus(), 100);
+      return () => clearTimeout(timer);
     }
-    const timer = setTimeout(() => inputRef.current?.focus(), 100);
-    return () => clearTimeout(timer);
-  }, [deliveryCode]);
+  }, [deliveryCode, token]);
 
   useEffect(() => {
     if (barcode === "") {
@@ -58,18 +76,58 @@ export default function DeliveryFrm({ navigation, route }: any) {
     }
   }, [barcode]);
 
+
+  useEffect(() => {
+    const subscriptionCancel = DeviceEventEmitter.addListener(
+      'ON_DELIVERY_CONFIRM_CANCEL',
+      () => {
+        setTotalQty("");
+        setRows([]);
+        setBarcode("");
+        inputRef.current?.focus();
+      }
+    );
+
+    return () => subscriptionCancel.remove();
+  }, [token]);
+
+  useEffect(() => {
+    const subscription = DeviceEventEmitter.addListener('ON_DELIVERY_CONFIRM_OK', (data) => {
+      palletDeal(data.barCode, data.scanType);
+    });
+    return () => subscription.remove();
+  }, [token]);
+
+
+
+
+
   const deliveryDeal = async (code: string) => {
     setLoading(true);
     try {
       const response = await fetch(`${BASE_URL}/api/DeliveryCheck`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, },
         body: JSON.stringify({
-          factoryCode: global.gs_factoryCode,
+          operateUserCode, operateUserName, operateWareHouseCode, operateRandomNumber, operateSign, operateVersion,
           deliveryCode: code,
+          barCode: "",
+          scanType: "",
+          factoryCode: global.gs_factoryCode,
           wareHouseCode: global.gs_wareCode
         })
       });
+
+      if (response.status === 401) {
+        Alert.alert("Unauthorized", "Token expired or invalid.");
+        return;
+      }
+
+      if (response.status === 403) {
+        Alert.alert("Access Denied", "You do not have permission.");
+        return;
+      }
+
 
       const result = await response.json();
       if (result.message == "success" && result.data) {
@@ -98,17 +156,27 @@ export default function DeliveryFrm({ navigation, route }: any) {
     try {
       const response = await fetch(`${BASE_URL}/api/BarcodeType`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, },
         body: JSON.stringify({
+          operateUserCode, operateUserName, operateWareHouseCode, operateRandomNumber, operateSign, operateVersion,
           factoryCode: global.gs_factoryCode,
           scanCode: sn
         })
       });
-      const result = await response.json();
-      if (result.code === 200 && result.data) {
-        console.log("message3", result);
-        return result.data.scanType;
 
+      if (response.status === 401) {
+        Alert.alert("Unauthorized", "Token expired or invalid.");
+        return;
+      }
+
+      if (response.status === 403) {
+        Alert.alert("Access Denied", "You do not have permission.");
+        return;
+      }
+      const result = await response.json();
+      if (result.message === "success" && result.data && result.data.length > 0) {
+        console.log("message3", result);
+        return result.data[0].scanType;
       }
       return "";
     } catch (error) {
@@ -121,11 +189,14 @@ export default function DeliveryFrm({ navigation, route }: any) {
 
   const palletDeal = async (barCode: string, scanType: string) => {
     setLoading(true);
+    setRows([]);
     try {
       const response = await fetch(`${BASE_URL}/api/DeliveryInsert`, {
+
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, },
         body: JSON.stringify({
+          operateUserCode, operateUserName, operateWareHouseCode, operateRandomNumber, operateSign, operateVersion,
           factoryCode: global.gs_factoryCode,
           wareHouseCode: global.gs_wareCode,
           deliveryCode: deliveryCode,
@@ -139,27 +210,30 @@ export default function DeliveryFrm({ navigation, route }: any) {
       });
 
       const result = await response.json();
-      if (result.code === 200 && result.data && result.data.length > 0) {
+      console.log("deliveryresult", result)
+      if (result.message === "success" && result.data && result.data.length > 0) {
         const firstItem = result.data[0];
-        setTotalQty(firstItem.totalQty);
+        if (firstItem.isok === "1") {
+          setTotalQty(firstItem.totalQty?.toString());
+          const isfinish = firstItem.isfinish;
 
-        if (firstItem.isok !== "1") {
+          const newRows = result.data.map((item: any) => ({
+            boxCode: item.boxCode,
+            model: item.model,
+            color: item.color,
+            boxQty: item.boxQty
+          }));
+          setRows(newRows);
+          console.log("message4", result);
+
+          Alert.alert("Success", "Pallet scanned successfully!");
+
+          if (isfinish === "1") {
+            Alert.alert("Info", "The delivery of documents has already shipped completed!");
+          }
+        } else {
           Alert.alert("Error", firstItem.retstr || "Operation failed");
           console.log("Delivery error:", firstItem);
-          return;
-        }
-
-        const newRows = result.data.map((item: any) => ({
-          boxCode: item.boxCode,
-          model: item.model,
-          color: item.color,
-          boxQty: item.boxQty
-        }));
-        setRows(newRows);
-        console.log("message4", result);
-
-        if (firstItem.isfinish === "1") {
-          Alert.alert("Info", "The delivery of documents has already shipped completed!");
         }
       } else {
         Alert.alert("Error", result.message || "There is no product in the Pallet!");
@@ -170,49 +244,134 @@ export default function DeliveryFrm({ navigation, route }: any) {
       Alert.alert("Error", "Failed to process pallet");
     } finally {
       setLoading(false);
+      setBarcode("");
+      inputRef.current?.focus();
     }
   };
+
+
 
   const handleScan = async () => {
     if (!barcode.trim()) return;
 
     const sn = barcode.toUpperCase().trim();
-    const scanType = await getType(sn);
+    setLoading(true);
+    try {
+      let scanType = await getType(sn);
 
-    if (scanType === "pallet" || scanType === "box") {
-      setBarcode(""); // Clear immediately like C#
-      navigation.navigate('DeliverySNConfirmBox', {
-        fromWareHouseCode: global.gs_wareCode,
-        barCode: sn,
-        scanType: scanType,
-        onConfirm: () => {
-          palletDeal(sn, scanType);
+      if (scanType === "") {
+        scanType = "pallet";
+      }
 
+      if (scanType === "pallet" || scanType === "box") {
+        const response = await fetch(`${BASE_URL}/api/DeliveryCheck`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, },
+          body: JSON.stringify({
+            operateUserCode, operateUserName, operateWareHouseCode, operateRandomNumber, operateSign, operateVersion,
+            deliveryCode: deliveryCode,
+            barCode: sn,
+            scanType: scanType,
+            factoryCode: global.gs_factoryCode,
+            wareHouseCode: global.gs_wareCode
+          })
+        });
+
+        if (response.status === 401) {
+          Alert.alert("Unauthorized", "Token expired or invalid.");
+          return;
         }
-      });
-      return;
-    }
 
-    if (scanType === "sn") {
-      setBarcode(""); // Clear immediately like C#
-      navigation.navigate('DeliverySNConfirm', {
-        fromWareHouseCode: global.gs_wareCode,
-        palletCode: "",
-        boxCode: "",
-        SN: sn,
-        scanType: scanType,
-        showConfirm: true,
-        onConfirm: () => {
-          palletDeal(sn, scanType);
+        if (response.status === 403) {
+          Alert.alert("Access Denied", "You do not have permission.");
+          return;
         }
-      });
-      return;
-    }
+        const result = await response.json();
+        if (result.message === "success" && result.data) {
+          if (result.data.isok === "1") {
+            setBarcode("");
+            navigation.navigate('DeliverySNConfirmBox', {
+              fromWareHouseCode: global.gs_wareCode,
+              barCode: sn,
+              scanType: scanType,
+              showConfirm: true,
+            });
+          } else {
+            Alert.alert("Error", result.data.retstr || "Validation failed");
+            setBarcode("");
+            inputRef.current?.focus();
+          }
+        } else {
+          Alert.alert("Error", result.message || "Check failed");
+          setBarcode("");
+          inputRef.current?.focus();
+        }
+        return;
+      }
 
-    // Default processing if no specific confirm needed
-    await palletDeal(sn, scanType);
-    setBarcode("");
-    inputRef.current?.focus();
+      if (scanType === "sn") {
+        const response = await fetch(`${BASE_URL}/api/DeliveryCheck`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, },
+          body: JSON.stringify({
+            operateUserCode, operateUserName, operateWareHouseCode, operateRandomNumber, operateSign, operateVersion,
+            deliveryCode: deliveryCode,
+            barCode: sn,
+            scanType: "sn",
+            factoryCode: global.gs_factoryCode,
+            wareHouseCode: global.gs_wareCode
+          })
+        });
+
+        if (response.status === 401) {
+          Alert.alert("Unauthorized", "Token expired or invalid.");
+          return;
+        }
+
+        if (response.status === 403) {
+          Alert.alert("Access Denied", "You do not have permission.");
+          return;
+        }
+        const result = await response.json();
+
+        if (result.code === 500) {
+          Alert.alert("Error", result.message);
+          navigation.goBack();
+          return;
+        }
+        if (result.message === "success" && result.data) {
+          if (result.data.isok === "1") {
+            setBarcode("");
+            navigation.navigate('DeliverySNConfirm', {
+              fromWareHouseCode: global.gs_wareCode,
+              palletCode: "",
+              boxCode: "",
+              SN: sn,
+              scanType,
+              showConfirm: true
+            });
+          } else {
+            Alert.alert("Error", result.data.retstr || "Validation failed");
+            setBarcode("");
+            inputRef.current?.focus();
+          }
+        } else {
+          Alert.alert("Error", result.message || "Check failed");
+          setBarcode("");
+          inputRef.current?.focus();
+        }
+        return;
+      }
+
+      // Default if scanType is something else
+      setBarcode("");
+      inputRef.current?.focus();
+    } catch (error) {
+      console.error(error);
+      Alert.alert("Error", "Scan processing error");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const viewDetails = () => {
@@ -222,113 +381,90 @@ export default function DeliveryFrm({ navigation, route }: any) {
   const tableHeaders = ["Boxcode", "Model", "Color", "Qty"];
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="light-content" backgroundColor="#1E1B4B" />
+    <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
 
       {/* Header */}
       <View style={styles.header}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+        <View style={styles.headerLeft}>
+          <TouchableOpacity onPress={() => navigation.goBack()} activeOpacity={0.7}>
+            <Image
+              source={require("../../assets/logo/left.png")}
+              style={styles.returnLogo}
+              resizeMode="contain"
+            />
+          </TouchableOpacity>
           <Text style={styles.headerTitle}>Warehouse Delivery</Text>
-          {loading && <ActivityIndicator color="#FFF" />}
         </View>
-        <Text style={styles.headerSubtitle}>Delivery: {deliveryCode || "N/A"}</Text>
-        <Text style={styles.headerSubtitle}>To: {toCkName || "—"}</Text>
+
+        <View style={styles.headerRight}>
+          <Text style={styles.userNameText}>{global.gs_userName}</Text>
+        </View>
       </View>
 
-      <ScrollView 
-        style={styles.container} 
-        contentContainerStyle={{ flexGrow: 1, paddingBottom: 40 }}
-        keyboardShouldPersistTaps="handled"
-      >
+      <View style={styles.content}>
         {/* Entry Card */}
         <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>Entry Scanner</Text>
+          <View style={styles.inputGroup1}>
+            <TextInput
+              style={[styles.input1, styles.disabledInput1]}
+              value={toCkName}
+              editable={false}
+              placeholder="To Warehouse"
+              placeholderTextColor="#FFFFFF"
+            />
+          </View>
+
+          <View style={styles.inputGroup1}>
+            <TextInput
+              style={[styles.input1, styles.disabledInput1]}
+              value={totalQty}
+              editable={false}
+              placeholder="Total Qty"
+              placeholderTextColor="#FFFFFF"
+            />
           </View>
 
           <View style={styles.inputGroup}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-              <Text style={styles.label}>Scan Barcode (SN/Box/Pallet)</Text>
-              <TouchableOpacity 
-                onPress={() => {
-                  setShowKeyboard(!showKeyboard);
-                  setTimeout(() => inputRef.current?.focus(), 100);
-                }}
-                style={styles.keyboardToggle}
-              >
-                <Text style={styles.keyboardToggleText}>
-                  {showKeyboard ? "⌨️ Hide Keyboard" : "⌨️ Show Keyboard"}
-                </Text>
-              </TouchableOpacity>
-            </View>
             <TextInput
               ref={inputRef}
               style={styles.input}
               value={barcode}
               onChangeText={setBarcode}
               onSubmitEditing={handleScan}
-              placeholder="Scan here..."
-              autoFocus
+              placeholder=" Barcode "
+              autoCapitalize="characters"
               showSoftInputOnFocus={showKeyboard}
               blurOnSubmit={false}
               onBlur={ensureFocus}
             />
           </View>
-
-          <View style={styles.rowInputs}>
-            <View style={[styles.inputGroup, { flex: 1, marginRight: 10 }]}>
-              <Text style={styles.label}>To Warehouse</Text>
-              <TextInput
-                style={[styles.input, styles.filledInput]}
-                value={toCkName}
-                editable={false}
-              />
-            </View>
-
-            <View style={[styles.inputGroup, { width: 100 }]}>
-              <Text style={styles.label}>Total Qty</Text>
-              <TextInput
-                style={[styles.input, styles.filledInput]}
-                value={totalQty}
-                editable={false}
-              />
-            </View>
-          </View>
         </View>
 
         {/* Details Card */}
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>Scan Details</Text>
-          </View>
-
+        <View style={styles.tableCard}>
           <ScrollView horizontal showsHorizontalScrollIndicator={true}>
             <View>
-              <View style={styles.tableHeaderRow}>
+              <View style={styles.tableHeader}>
                 {tableHeaders.map((h) => (
-                  <Text key={h} style={styles.headerCell}>
+                  <Text key={h} style={[styles.headerCell, { width: 100 }]}>
                     {h}
                   </Text>
                 ))}
               </View>
 
-              <ScrollView 
-                style={{ height: 150 }} 
-                nestedScrollEnabled={true}
-              >
+              <ScrollView style={{ flex: 1 }}>
                 {rows.length > 0 ? (
                   rows.map((item, index) => (
-                    <View key={index} style={styles.tableDataRow}>
-                      <Text style={styles.cell}>{item.boxCode}</Text>
-                      <Text style={styles.cell}>{item.model}</Text>
-                      <Text style={styles.cell}>{item.color}</Text>
-                      <Text style={styles.cell}>{item.boxQty}</Text>
+                    <View key={index} style={styles.tableRow}>
+                      <Text style={[styles.cell, { width: 100 }]}>{item.boxCode}</Text>
+                      <Text style={[styles.cell, { width: 100 }]}>{item.model}</Text>
+                      <Text style={[styles.cell, { width: 100 }]}>{item.color}</Text>
+                      <Text style={[styles.cell, { width: 100 }]}>{item.boxQty}</Text>
                     </View>
                   ))
                 ) : (
-                  <View style={styles.emptyContainer}>
-                    <Text style={styles.emptyText}>No items scanned yet</Text>
-                  </View>
+                  <Text style={[styles.emptyText, { width: 400 }]}>No items scanned yet</Text>
                 )}
               </ScrollView>
             </View>
@@ -336,103 +472,74 @@ export default function DeliveryFrm({ navigation, route }: any) {
         </View>
 
         {/* Actions */}
-        <View style={styles.actionContainer}>
+        <View style={styles.footer}>
           <TouchableOpacity
-            style={[styles.btn, styles.btnPrimary]}
+            style={styles.detailButton}
             onPress={viewDetails}
           >
-            <Text style={styles.btnText}>View Details</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.btn, styles.btnSecondary]}
-            onPress={() => navigation.goBack()}
-          >
-            <Text style={styles.btnTextSecondary}>Exit</Text>
+            <Text style={styles.detailButtonText}> Barcode Details</Text>
           </TouchableOpacity>
         </View>
-      </ScrollView>
+      </View>
     </SafeAreaView>
   );
 }
 
+const { width, height } = Dimensions.get("window");
+const isSmallDevice = width < 360;
+const scale = (size: number) => (width / 375) * size;
+
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#F8FAFC" },
-  container: { flex: 1, padding: 16, paddingBottom: 40 },
+  container: { flex: 1, backgroundColor: "#F8FAFC" },
   header: {
-    backgroundColor: "#1E1B4B",
-    paddingTop: 20,
-    paddingBottom: 20,
-    paddingHorizontal: 20,
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
+    backgroundColor: "#0052cc",
+    paddingHorizontal: width * 0.05,
+    height: scale(56),
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    elevation: 4,
   },
-  headerTitle: { color: "#FFFFFF", fontSize: 22, fontWeight: "800" },
-  headerSubtitle: { color: "#A5B4FC", fontSize: 14, fontWeight: "600", marginTop: 4 },
-  card: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 5,
-    elevation: 2,
+  headerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
   },
-  cardHeader: { borderLeftWidth: 4, borderLeftColor: "#4F46E5", paddingLeft: 10, marginBottom: 20 },
-  cardTitle: { fontSize: 14, fontWeight: "800", color: "#475569", textTransform: "uppercase" },
-  inputGroup: { marginBottom: 15 },
-  label: { fontSize: 12, fontWeight: "700", color: "#64748B", marginBottom: 6, marginLeft: 2 },
-  input: {
-    height: 50,
-    backgroundColor: "#F1F5F9",
-    borderRadius: 10,
-    paddingHorizontal: 15,
-    fontSize: 18,
-    color: "#000000",
-    borderWidth: 1,
-    borderColor: "#CBD5E1",
+  returnLogo: {
+    width: scale(24),
+    height: scale(24),
+    marginRight: 10,
+    tintColor: "#FFFFFF",
   },
-  filledInput: { backgroundColor: "#F8FAFC", borderColor: "#E2E8F0", color: "#64748B" },
-  rowInputs: { flexDirection: "row", alignItems: "flex-end" },
-  tableHeaderRow: { flexDirection: "row", backgroundColor: "#F1F5F9", borderRadius: 8, paddingVertical: 10 },
-  headerCell: { width: 100, textAlign: "center", fontSize: 10, fontWeight: "800", color: "#64748B", textTransform: "uppercase" },
-  tableDataRow: { 
-    flexDirection: "row", 
-    borderBottomWidth: 1, 
-    borderBottomColor: "#F1F5F9",
-    height: 50,
+  headerTitle: {
+    color: "#FFFFFF",
+    fontSize: isSmallDevice ? scale(14) : scale(16),
+    fontWeight: "900",
   },
-  cell: { 
-    width: 100, 
-    textAlign: "center", 
-    paddingVertical: 15, 
-    fontSize: 12, 
-    color: "#334155", 
-    fontWeight: "600" 
+  headerRight: {
+    flexDirection: "row",
+    alignItems: "center",
   },
-  emptyContainer: { flex: 1, justifyContent: "center", alignItems: "center", paddingTop: 20, width: 400 },
-  emptyText: { color: "#94A3B8", fontStyle: "italic", fontSize: 13 },
-  actionContainer: { flexDirection: "row", gap: 12, marginTop: 10 },
-  btn: { flex: 1, height: 55, borderRadius: 14, justifyContent: "center", alignItems: "center", elevation: 3 },
-  btnPrimary: { backgroundColor: "#2563EB" },
-  btnSecondary: { backgroundColor: "#FEE2E2", borderWidth: 1, borderColor: "#FECACA" },
-  btnText: { color: "#FFFFFF", fontWeight: "800", fontSize: 16 },
-  btnTextSecondary: { color: "#EF4444", fontWeight: "800", fontSize: 16 },
-  keyboardToggle: {
-    backgroundColor: '#F1F5F9',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
+  userNameText: {
+    color: "#FFFFFF",
+    fontSize: scale(12),
+    fontWeight: "700",
+    marginRight: 1,
   },
-  keyboardToggleText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#4F46E5',
-  },
+  content: { flex: 1, padding: 8 },
+  card: { backgroundColor: "#FFF", borderRadius: 16, padding: 8, marginBottom: 8, elevation: 2, borderWidth: 1, borderColor: "#0052cc" },
+  inputGroup: { marginBottom: 4 },
+  input: { backgroundColor: "#e2f0eeff", height: 32, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 0, fontSize: 12, color: "#334155", fontWeight: "600", borderWidth: 1, borderColor: "#CBD5E1" },
+  disabledInput: { backgroundColor: "#E2E8F0", color: "#64748B" },
+  inputGroup1: { marginBottom: 4 },
+  input1: { backgroundColor: "#0052cc", height: 32, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 0, fontSize: 12, color: "#FFFFFF", fontWeight: "600", borderWidth: 1, borderColor: "#CBD5E1" },
+  disabledInput1: { backgroundColor: "#0052cc", color: "#FFFFFF" },
+  tableCard: { flex: 1, backgroundColor: "#FFF", borderRadius: 16, overflow: "hidden", elevation: 2, borderWidth: 1, borderColor: "#0052cc", marginBottom: 8 },
+  tableHeader: { flexDirection: "row", backgroundColor: "#0052cc", paddingVertical: 10 },
+  headerCell: { fontSize: 10, fontWeight: "800", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
+  tableRow: { flexDirection: "row", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#F1F5F9", alignItems: "center" },
+  cell: { fontSize: 11, color: "#334155", textAlign: "center", fontWeight: "600" },
+  emptyText: { textAlign: "center", color: "#94A3B8", marginTop: 40, fontStyle: "italic" },
+  footer: { flexDirection: "row", gap: 12 },
+  detailButton: { flex: 1, backgroundColor: "#4F46E5", padding: 12, borderRadius: 12, alignItems: "center", height: 40 },
+  detailButtonText: { color: "#FFF", fontWeight: "900", fontSize: 12 },
 });

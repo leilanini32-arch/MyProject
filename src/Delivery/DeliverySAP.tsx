@@ -1,18 +1,23 @@
 import React, { useState, useRef, useEffect } from "react";
+import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   View,
   Text,
   TextInput,
   StyleSheet,
-  SafeAreaView,
   TouchableOpacity,
   FlatList,
   ScrollView,
   StatusBar,
   ActivityIndicator,
   Alert,
+  Image,
+  Dimensions,
 } from "react-native";
+import { useFocusEffect } from '@react-navigation/native';
 import { useGlobal } from "../../GlobalContext.tsx";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
 
 interface DeliveryItem {
   bonNo: string;
@@ -28,10 +33,13 @@ interface DeliveryItem {
 
 export default function DeliverySAP({ navigation, route }: any) {
   const global = useGlobal();
-  const { gsURL, gs_factoryCode, gs_wareCode, gs_userCode, gs_userName } = global;
+  const { gsURL, gs_factoryCode, gs_wareCode, gs_userCode, gs_userName ,
+    operateUserCode, operateUserName, operateWareHouseCode, operateRandomNumber, operateSign, operateVersion,
+  } = global;
   const BASE_URL = gsURL;
+  const [token, setToken] = useState("");
 
-  const [bonNo, setBonNo] = useState("");
+
   const [depotNo, setDepotNo] = useState("");
   const [modelInput, setModelInput] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
@@ -40,7 +48,8 @@ export default function DeliverySAP({ navigation, route }: any) {
   const [loading, setLoading] = useState(false);
   const [showKeyboard, setShowKeyboard] = useState(false);
 
-  // Internal tracking variables (equivalent to f_ variables in C#)
+  // Use ref for bonNo to prevent re-renders on every keystroke
+  const bonNoRef = useRef("");
   const [f_systemDeliveryCode, setFSystemDeliveryCode] = useState("");
   const [f_fromck, setFFromck] = useState("");
   const [f_tokh, setFTokh] = useState("");
@@ -59,41 +68,88 @@ export default function DeliverySAP({ navigation, route }: any) {
     bonRef.current?.focus();
   }, []);
 
+  useEffect(() => {
+    const loadToken = async () => {
+      const t = await AsyncStorage.getItem("userToken");
+      console.log("TOKEN IN Allocateout", t);
+      if (t) setToken(t);
+    };
+
+    loadToken();
+  }, []);
+
   const fetchDeliveryPlan = async (systemDeliveryCode: string) => {
+    if (loading) return;
+
+    // Clean the code: remove non-printable characters and trim
+    const cleanCode = systemDeliveryCode.replace(/[^\x20-\x7E]/g, '').trim().toUpperCase();
+    if (!cleanCode || cleanCode.length < 3) return;
+
     setErrorMsg("");
     setLoading(true);
+    setItems([]);
+
     try {
-      // 1. Get SAP Bill (equivalent to pub.GetSAPBill)
+
       const sapResponse = await fetch(`${BASE_URL}/api/SAPBill/GetSAPBill`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, },
         body: JSON.stringify({
-          MAIN_BILL_CODE: systemDeliveryCode,
+          operateUserCode, operateUserName, operateWareHouseCode, operateRandomNumber, operateSign, operateVersion,
+          MAIN_BILL_CODE: cleanCode,
           UserCode: gs_userCode,
           UserName: gs_userName,
         }),
       });
+
+      if (sapResponse.status === 401) {
+        Alert.alert("Unauthorized", "Token expired or invalid.");
+        return;
+      }
+
+      if (sapResponse.status === 403) {
+        Alert.alert("Access Denied", "You do not have permission.");
+        return;
+      }
+
+
       const sapResult = await sapResponse.json();
-      if (sapResult && sapResult.message) {
+      console.log("SAP API RESPONSE:", sapResult);
+
+      if (sapResult && sapResult.code !== 200 && sapResult.message) {
         setErrorMsg("SAP msg: " + sapResult.message);
       }
-      console.log("API RESPONSE:", sapResult);
-    } catch (err: any) {
-      setErrorMsg("SAP Error: " + err.message);
-    }
 
-    try {
+      // 2. Get Delivery Plan
       const planResponse = await fetch(`${BASE_URL}/api/DeliveryModel`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, },
         body: JSON.stringify({
+          operateUserCode, operateUserName, operateWareHouseCode, operateRandomNumber, operateSign, operateVersion,
           factoryCode: gs_factoryCode,
-          systemDeliveryCode: systemDeliveryCode,
+          systemDeliveryCode: cleanCode,
         }),
       });
 
+      if (planResponse.status === 401) {
+        Alert.alert("Unauthorized", "Token expired or invalid.");
+        return;
+      }
+
+      if (planResponse.status === 403) {
+        Alert.alert("Access Denied", "You do not have permission.");
+        return;
+      }
+
+
       const planData = await planResponse.json();
-      console.log("API RESPONSE2:", planData);
+
+      if (planData.code === 500) {
+        Alert.alert("Error", planData.message);
+        navigation.goBack();
+        return;
+      }
+      console.log("Plan API RESPONSE:", planData);
 
       const newItems: DeliveryItem[] = [];
       let fromck = "";
@@ -102,7 +158,7 @@ export default function DeliverySAP({ navigation, route }: any) {
       if (planData && planData.data) {
         planData.data.forEach((row: any) => {
           newItems.push({
-            bonNo: systemDeliveryCode,
+            bonNo: cleanCode,
             model: row.model,
             color: row.color,
             qty: parseInt(row.qty),
@@ -121,14 +177,13 @@ export default function DeliverySAP({ navigation, route }: any) {
 
       if (fromck !== "" && fromck !== gs_wareCode) {
         setErrorMsg("Source WareHouse Must be Login WareHouse " + gs_wareCode);
-        setBonNo("");
         setItems([]);
         setFSystemDeliveryCode("");
         bonRef.current?.focus();
         return;
       }
 
-      setFSystemDeliveryCode(systemDeliveryCode);
+      setFSystemDeliveryCode(cleanCode);
 
       if (fromck !== "") {
         setDepotNo(tokh + "#" + fromck);
@@ -141,295 +196,264 @@ export default function DeliverySAP({ navigation, route }: any) {
         depotRef.current?.focus();
       }
     } catch (err: any) {
-      setErrorMsg("Plan Error: " + err.message);
+      setErrorMsg("Error: " + err.message);
+      console.error("Fetch error:", err);
     } finally {
       setLoading(false);
     }
   };
 
+
+  useFocusEffect(
+    React.useCallback(() => {
+      if (f_systemDeliveryCode) {
+        fetchDeliveryPlan(f_systemDeliveryCode);
+      }
+    }, [f_systemDeliveryCode, token])
+  );
+
+  const handleBonChange = (text: string) => {
+    bonNoRef.current = text;
+    if (text.includes('\n') || text.includes('\r')) {
+      const sn = text.trim();
+      if (bonRef.current) {
+        bonRef.current.setNativeProps({ text: "" });
+      }
+      bonNoRef.current = "";
+      if (sn.length > 0) {
+        fetchDeliveryPlan(sn);
+      }
+    }
+  };
+
   const handleBonSubmit = () => {
-    const sn = bonNo.toUpperCase().trim();
+    const sn = bonNoRef.current.trim();
     if (sn.length > 0) {
+      if (bonRef.current) {
+        bonRef.current.setNativeProps({ text: "" });
+      }
+      bonNoRef.current = "";
       fetchDeliveryPlan(sn);
     }
   };
 
   const handleChoice = () => {
+    let selectedItem;
+
     if (selectedIndex !== null && items[selectedIndex]) {
-      const deliveryCode = items[selectedIndex].deliveryCode;
-      navigation.navigate('DeliveryFrm', { deliveryCode });
-    } else if (items.length > 0) {
-      navigation.navigate('DeliveryFrm', { deliveryCode: items[0].deliveryCode });
+      selectedItem = items[selectedIndex];
+    }
+
+    if (selectedItem) {
+      const deliveryCode = selectedItem.deliveryCode;
+
+      // Ouvrir le modal pour l'écran DeliveryFrm (équivalent à ShowDialog)
+      navigation.navigate('DeliveryFrm', {
+        deliveryCode,
+        onClose: () => {
+          // Rafraîchir la liste après fermeture du modal
+          fetchDeliveryPlan(f_systemDeliveryCode);
+        },
+      });
     } else {
       setErrorMsg("Please select an item first");
     }
+
+
   };
 
-  const renderItem = ({ item, index }: { item: DeliveryItem; index: number }) => {
-    let textColor = "#000";
+  const renderItem = React.useCallback(({ item, index }: { item: DeliveryItem; index: number }) => {
+    let textColor = "#334155";
     if (item.difference > 0) {
-      textColor = item.finishQty > 0 ? "blue" : "red";
+      textColor = item.finishQty > 0 ? "#2563EB" : "#EF4444";
     }
 
     const isSelected = selectedIndex === index;
 
     return (
       <TouchableOpacity
-        style={[styles.row, isSelected && styles.selectedRow]}
+        key={index}
+        style={[styles.tableRow, isSelected && styles.selectedRow]}
         onPress={() => setSelectedIndex(index)}
       >
-        <Text style={[styles.cell, { color: textColor }]}>{item.bonNo}</Text>
-        <Text style={[styles.cell, { color: textColor }]}>{item.model}</Text>
-        <Text style={[styles.cell, { color: textColor }]}>{item.color}</Text>
-        <Text style={[styles.cell, { color: textColor }]}>{item.qty}</Text>
-        <Text style={[styles.cell, { color: textColor }]}>{item.finishQty}</Text>
-        <Text style={[styles.cell, { color: textColor }]}>{item.difference}</Text>
-        <Text style={[styles.cell, { color: textColor }]}>{item.from}</Text>
-        <Text style={[styles.cell, { color: textColor }]}>{item.to}</Text>
-        <Text style={[styles.cell, { color: textColor }]}>{item.deliveryCode}</Text>
+        <Text style={[styles.cell, { color: textColor, width: 120 }]}>{item.bonNo}</Text>
+        <Text style={[styles.cell, { color: textColor, width: 120 }]}>{item.model}</Text>
+        <Text style={[styles.cell, { color: textColor, width: 100 }]}>{item.color}</Text>
+        <Text style={[styles.cell, { color: textColor, width: 60 }]}>{item.qty}</Text>
+        <Text style={[styles.cell, { color: textColor, width: 60 }]}>{item.finishQty}</Text>
+        <Text style={[styles.cell, { color: textColor, width: 60 }]}>{item.difference}</Text>
+        <Text style={[styles.cell, { color: textColor, width: 100 }]}>{item.from}</Text>
+        <Text style={[styles.cell, { color: textColor, width: 100 }]}>{item.to}</Text>
+        <Text style={[styles.cell, { color: textColor, width: 200 }]}>{item.deliveryCode}</Text>
       </TouchableOpacity>
     );
-  };
+  }, [selectedIndex]);
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#1E1B4B" />
+      <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
       <View style={styles.header}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-          <View>
-            <Text style={styles.headerTitle}>Warehouse Delivery Scanning</Text>
-            <Text style={styles.headerSubtitle}>ScanNO SAP</Text>
-          </View>
-          {loading && <ActivityIndicator color="#FFF" />}
+        <View style={styles.headerLeft}>
+          <TouchableOpacity onPress={() => navigation.goBack()} activeOpacity={0.7}>
+            <Image
+              source={require("../../assets/logo/left.png")}
+              style={styles.returnLogo}
+              resizeMode="contain"
+            />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Warehouse Delivery Scann</Text>
+        </View>
+
+        <View style={styles.headerRight}>
+          <Text style={styles.userNameText}>{gs_userName}</Text>
         </View>
       </View>
 
-      <ScrollView 
-        style={styles.content} 
-        contentContainerStyle={{ flexGrow: 1, paddingBottom: 20 }}
-        keyboardShouldPersistTaps="handled"
-      >
+      <View style={styles.content}>
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Delivery Entry</Text>
-
           {errorMsg ? <Text style={styles.errorText}>{errorMsg}</Text> : null}
 
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
-            <Text style={styles.label}>BON NO.</Text>
-            <TouchableOpacity 
-              onPress={() => {
-                setShowKeyboard(!showKeyboard);
-                setTimeout(() => bonRef.current?.focus(), 100);
-              }}
-              style={styles.keyboardToggle}
-            >
-              <Text style={styles.keyboardToggleText}>
-                {showKeyboard ? "⌨️ Hide Keyboard" : "⌨️ Show Keyboard"}
-              </Text>
-            </TouchableOpacity>
+          <View style={styles.inputGroup}>
+            <TextInput
+              ref={bonRef}
+              style={styles.input}
+              defaultValue=""
+              onChangeText={handleBonChange}
+              onSubmitEditing={handleBonSubmit}
+              placeholder=" BON NO"
+              placeholderTextColor="#334155"
+              autoCapitalize="characters"
+              showSoftInputOnFocus={showKeyboard}
+              blurOnSubmit={false}
+              onBlur={ensureFocus}
+            />
           </View>
-          <TextInput
-            ref={bonRef}
-            style={styles.input}
-            value={bonNo}
-            onChangeText={setBonNo}
-            onSubmitEditing={handleBonSubmit}
-            placeholder="Scan or enter BON"
-            autoCapitalize="characters"
-            showSoftInputOnFocus={showKeyboard}
-            blurOnSubmit={false}
-            onBlur={ensureFocus}
-          />
 
-          <Text style={styles.label}>DEPOT NO.</Text>
-          <TextInput
-            ref={depotRef}
-            style={styles.input}
-            value={depotNo}
-            onChangeText={setDepotNo}
-            placeholder="toKh#fromck"
-            autoCapitalize="characters"
-          />
+          <View style={styles.inputGroup1}>
+            <TextInput
+              ref={depotRef}
+              style={styles.input1}
+              value={depotNo}
+              onChangeText={setDepotNo}
+              placeholder="DEPOT NO"
+              autoCapitalize="characters"
+              placeholderTextColor="#FFFFFF"
+            />
+          </View>
 
-          <Text style={styles.label}>MODEL</Text>
-          <TextInput
-            ref={modelRef}
-            style={styles.input}
-            value={modelInput}
-            onChangeText={setModelInput}
-            placeholder="model#qty#price"
-            autoCapitalize="characters"
-          />
         </View>
 
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Recent Scan Details</Text>
-           
+        <View style={styles.tableCard}>
           <ScrollView horizontal showsHorizontalScrollIndicator={true}>
             <View>
-              <View style={[styles.row, styles.tableHeader]}>
-                {["BON NO", "Model", "Color", "QTY", "Finish", "Diff", "From", "To", "Code"].map((h) => (
-                  <Text key={h} style={[styles.cell, styles.headerCell]}>{h}</Text>
-                ))}
+              <View style={styles.tableHeader}>
+                <Text style={[styles.headerCell, { width: 120 }]}>BON NO</Text>
+                <Text style={[styles.headerCell, { width: 120 }]}>Model</Text>
+                <Text style={[styles.headerCell, { width: 100 }]}>Color</Text>
+                <Text style={[styles.headerCell, { width: 60 }]}>QTY</Text>
+                <Text style={[styles.headerCell, { width: 60 }]}>Finish</Text>
+                <Text style={[styles.headerCell, { width: 60 }]}>Diff</Text>
+                <Text style={[styles.headerCell, { width: 100 }]}>From</Text>
+                <Text style={[styles.headerCell, { width: 100 }]}>To</Text>
+                <Text style={[styles.headerCell, { width: 150 }]}>Delivery</Text>
               </View>
-              <ScrollView 
-                style={{ height: 120 }} 
-                nestedScrollEnabled={true}
-              >
-                {items.length === 0 ? (
-                  <Text style={styles.empty}>Waiting for Scanning...</Text>
-                ) : (
-                  items.map((item, index) => renderItem({ item, index }))
-                )}
-              </ScrollView>
+              <FlatList
+                data={items}
+                renderItem={renderItem}
+                keyExtractor={(item, index) => `${item.deliveryCode}-${index}`}
+                ListEmptyComponent={
+                  <Text style={styles.emptyText}>
+                    {loading ? "Loading..." : "Waiting for Scanning..."}
+                  </Text>
+                }
+                style={{ flex: 1 }}
+                initialNumToRender={10}
+                maxToRenderPerBatch={10}
+                windowSize={5}
+                removeClippedSubviews={true}
+              />
             </View>
           </ScrollView>
         </View>
 
-        <View style={styles.actions}>
-          <TouchableOpacity style={styles.primaryButton} onPress={handleChoice}>
-            <Text style={styles.primaryButtonText}>Choice</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.secondaryButton} onPress={() => navigation.goBack()}>
-            <Text style={styles.secondaryButtonText}>Exit</Text>
+        <View style={styles.footer}>
+          <TouchableOpacity style={styles.detailButton} onPress={handleChoice}>
+            <Text style={styles.detailButtonText}>Choice</Text>
           </TouchableOpacity>
         </View>
-      </ScrollView>
+        {loading && (
+          <View style={styles.loadingOverlay}>
+            <ActivityIndicator size="large" color="#0052cc" />
+          </View>
+        )}
+      </View>
     </SafeAreaView>
   );
 }
 
+const { width, height } = Dimensions.get("window");
+const isSmallDevice = width < 360;
+const scale = (size: number) => (width / 375) * size;
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F8FAFC" },
   header: {
-    backgroundColor: "#1E1B4B",
-    padding: 20,
-    borderBottomLeftRadius: 30,
-    borderBottomRightRadius: 30,
+    backgroundColor: "#0052cc",
+    paddingHorizontal: width * 0.05,
+    height: scale(56),
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    elevation: 4,
+  },
+  headerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  returnLogo: {
+    width: scale(24),
+    height: scale(24),
+    marginRight: 10,
+    tintColor: "#FFFFFF",
   },
   headerTitle: {
-    color: "#fff",
-    fontSize: 20,
+    color: "#FFFFFF",
+    fontSize: isSmallDevice ? scale(14) : scale(16),
     fontWeight: "900",
   },
-  headerSubtitle: {
-    color: "#A5B4FC",
-    fontSize: 12,
-    marginTop: 4,
-  },
-  content: {
-    flex: 1,
-    padding: 15,
-  },
-  card: {
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 15,
-    elevation: 2,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-  },
-  cardTitle: {
-    fontSize: 14,
-    fontWeight: "900",
-    marginBottom: 10,
-    color: "#475569",
-    textTransform: "uppercase",
-  },
-  label: {
-    fontSize: 11,
-    fontWeight: "700",
-    marginTop: 8,
-    color: "#64748B",
-  },
-  input: {
-    backgroundColor: "#F1F5F9",
-    padding: 10,
-    borderRadius: 10,
-    marginTop: 4,
-    fontSize: 14,
-    color: "#000",
-    borderWidth: 1,
-    borderColor: "#CBD5E1",
-  },
-  tableHeader: {
-    backgroundColor: "#F1F5F9",
-    borderRadius: 8,
-    marginBottom: 5,
-  },
-  row: {
+  headerRight: {
     flexDirection: "row",
-    borderBottomWidth: 1,
-    borderBottomColor: "#F1F5F9",
-    height: 40,
-  },
-  cell: {
-    width: 90,
-    paddingVertical: 12,
-    fontSize: 11,
-    textAlign: "center",
-    fontWeight: "600",
-  },
-  headerCell: {
-    fontWeight: "900",
-    fontSize: 10,
-    color: "#64748B",
-    textTransform: "uppercase",
-  },
-  empty: {
-    textAlign: "center",
-    padding: 20,
-    color: "#94A3B8",
-    fontStyle: "italic",
-    width: 810,
-  },
-  actions: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 10,
-  },
-  primaryButton: {
-    flex: 1,
-    backgroundColor: "#2563EB",
-    padding: 15,
-    borderRadius: 12,
-    justifyContent: "center",
     alignItems: "center",
   },
-  primaryButtonText: {
-    color: "#fff",
-    fontWeight: "900",
-    fontSize: 16,
+  userNameText: {
+    color: "#FFFFFF",
+    fontSize: scale(12),
+    fontWeight: "700",
+    marginRight: 1,
   },
-  secondaryButton: {
-    flex: 1,
-    backgroundColor: "#FEE2E2",
-    padding: 15,
-    borderRadius: 12,
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#FECACA",
-  },
-  secondaryButtonText: {
-    color: "#EF4444",
-    fontWeight: "900",
-    fontSize: 16,
-  },
+  content: { flex: 1, padding: 8 },
+  card: { backgroundColor: "#FFF", borderRadius: 16, paddingTop: 10, paddingBottom: 8, padding: 8, marginBottom: 8, elevation: 2, borderWidth: 1, borderColor: "#0052cc" },
+  inputGroup: { marginBottom: 4 },
+  input: { backgroundColor: "#e2f0eeff", height: 40, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 0, fontSize: 14, color: "#1E293B", fontWeight: "600", borderWidth: 1, borderColor: "#0052cc" },
+  inputGroup1: { marginBottom: 4 },
+  input1: { backgroundColor: "#0052cc", height: 40, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 0, fontSize: 14, color: "#FFFFFF", fontWeight: "600", borderWidth: 1, borderColor: "#CBD5E1" },
+  tableCard: { flex: 1, backgroundColor: "#FFF", borderRadius: 16, overflow: "hidden", elevation: 2, borderWidth: 1, borderColor: "#0052cc", marginBottom: 8 },
+  tableHeader: { flexDirection: "row", backgroundColor: "#0052cc", paddingVertical: 10 },
+  headerCell: { fontSize: 10, fontWeight: "800", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
+  tableRow: { flexDirection: "row", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#F1F5F9", alignItems: "center" },
+  cell: { fontSize: 11, color: "#334155", textAlign: "center", fontWeight: "600" },
+  emptyText: { textAlign: "center", padding: 40, color: "#94A3B8", fontStyle: "italic", width: 830 },
+  footer: { borderTopWidth: 1, borderTopColor: '#e2e8f0', paddingTop: 2 },
+  detailButton: { height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0052cc' },
+  detailButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
   errorText: { color: "#EF4444", fontSize: 12, marginBottom: 8, fontWeight: "700" },
   selectedRow: { backgroundColor: "#E0E7FF" },
-  keyboardToggle: {
-    backgroundColor: '#F1F5F9',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
-  },
-  keyboardToggleText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#4F46E5',
+  returnLogoWrapper: { padding: 4 },
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
   },
 });

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
+import { SafeAreaView } from 'react-native-safe-area-context';
 import {
     View,
     Text,
@@ -9,8 +10,15 @@ import {
     StatusBar,
     ActivityIndicator,
     ListRenderItem,
+    Image,
+    Dimensions,
+    ScrollView,
+    DeviceEventEmitter,
+
 } from "react-native";
 import { useGlobal } from "../../GlobalContext.tsx";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
 
 interface PalletDetail {
     id: string;
@@ -24,27 +32,49 @@ interface PalletDetail {
 }
 
 export default function AllocateSNConfirmBox({ navigation, route }: any) {
-    const { fromWareHouseCode, barCode, scanType, onConfirm } = route.params || {};
+    const { fromWareHouseCode, barCode, scanType } = route.params || {};
     const global = useGlobal();
-    const { gsURL, gs_factoryCode } = global;
+    const { gsURL, gs_factoryCode, gs_userName, gs_wareCode,operateUserCode, operateUserName, operateWareHouseCode, operateRandomNumber, operateSign, operateVersion, } = global;
     const BASE_URL = gsURL;
+    const [token, setToken] = useState("");
+
 
     const [loading, setLoading] = useState(false);
     const [items, setItems] = useState<PalletDetail[]>([]);
     const [selectedItem, setSelectedItem] = useState<PalletDetail | null>(null);
     const [palletCode, setPalletCode] = useState("");
 
+
+
+
     useEffect(() => {
-        fetchPalletDetails();
+        const loadToken = async () => {
+            const t = await AsyncStorage.getItem("userToken");
+            console.log("TOKEN IN Allocateout", t);
+            if (t) setToken(t);
+        };
+
+        loadToken();
     }, []);
+
+
+
+    useEffect(() => {
+        if (token) {
+            fetchPalletDetails();
+        }
+    }, [token]);
+
+
 
     const fetchPalletDetails = async () => {
         setLoading(true);
         try {
             const response = await fetch(`${BASE_URL}/api/AllocatePalletSNConfirmBox`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, },
                 body: JSON.stringify({
+                    operateUserCode, operateUserName, operateWareHouseCode, operateRandomNumber, operateSign, operateVersion,
                     factoryCode: gs_factoryCode,
                     fromWareHouseCode,
                     barCode,
@@ -52,8 +82,25 @@ export default function AllocateSNConfirmBox({ navigation, route }: any) {
                 })
             });
 
+            if (response.status === 401) {
+                Alert.alert("Unauthorized", "Token expired or invalid.");
+                return;
+            }
+
+            if (response.status === 403) {
+                Alert.alert("Access Denied", "You do not have permission.");
+                return;
+            }
+
+
             const result = await response.json();
-            console.log("confrmbox ",result)
+
+            if (result.code === 500) {
+                Alert.alert("Error", result.message);
+                navigation.goBack();
+                return;
+            }
+            console.log("outresult", result);
             if (result.message === 'success' && result.data && result.data.length > 0) {
                 const mappedData = result.data.map((row: any, index: number) => ({
                     id: index.toString(),
@@ -68,9 +115,13 @@ export default function AllocateSNConfirmBox({ navigation, route }: any) {
                 setItems(mappedData);
                 setPalletCode(result.data[0].palletCode || "");
             } else {
+                setItems([]);
+                setPalletCode("");
                 Alert.alert("Message", result.message || "There is no product in the Pallet!");
             }
         } catch (error) {
+            setItems([]);
+            setPalletCode("");
             Alert.alert("Error", "Failed to load pallet details");
         } finally {
             setLoading(false);
@@ -83,21 +134,34 @@ export default function AllocateSNConfirmBox({ navigation, route }: any) {
     );
 
     const confirmBatch = (): void => {
-        Alert.alert(
-            'Confirm Batch Processing',
-            `Review Summary:\n\nTotal Boxes: ${items.length}\nTotal Units: ${totalQty}\n\nProceed with confirmation?`,
-            [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                    text: 'Confirm',
-                    onPress: () => {
-                        if (onConfirm) onConfirm();
-                        navigation.goBack();
-                        Alert.alert('Success', 'Batch processed and inventory updated.');
+        if (items.length >= 1) {
+            Alert.alert(
+                "Confirmation",
+                "Are you sure you want to confirm this operation?",
+                [
+                    {
+                        text: "Cancel",
+                        style: "cancel"
                     },
-                },
-            ]
-        );
+                    {
+                        text: "Yes",
+                        onPress: () => {
+                            DeviceEventEmitter.emit(
+                                "ON_ALLOCATE_CONFIRM",
+                                {
+                                    barCode,
+                                    scanType
+                                }
+                            );
+
+                            navigation.goBack();
+                        }
+                    }
+                ]
+            );
+        } else {
+            Alert.alert("Message", "No items to confirm.");
+        }
     };
 
     const showBarcodeDetails = (): void => {
@@ -107,8 +171,8 @@ export default function AllocateSNConfirmBox({ navigation, route }: any) {
         }
 
         navigation.navigate('AllocateSNConfirm', {
-            fromWareHouseCode,
-            palletCode: selectedItem.palletCode,
+            fromWareHouseCode: gs_wareCode,
+            palletCode: palletCode,
             boxCode: selectedItem.boxCode,
             SN: "",
             scanType,
@@ -116,65 +180,88 @@ export default function AllocateSNConfirmBox({ navigation, route }: any) {
         });
     };
 
-    const renderItem: ListRenderItem<PalletDetail> = ({ item, index }) => (
+    const handleReturn = () => {
+        navigation.goBack();
+    };
+
+    const renderItem: ListRenderItem<PalletDetail> = ({ item }) => (
         <TouchableOpacity
             onPress={() => setSelectedItem(item)}
             style={[
                 styles.row,
-                index % 2 === 0 ? styles.rowEven : styles.rowOdd,
                 selectedItem?.id === item.id && { backgroundColor: '#dbeafe' },
             ]}
         >
-            <Text style={[styles.cell, styles.cellNo]}>{index + 1}</Text>
-            <Text style={[styles.cell, styles.cellCode]}>{item.boxCode}</Text>
-            <Text style={[styles.cell, styles.cellQty]}>{item.qty}</Text>
-            <Text style={[styles.cell, styles.cellModel]}>{item.model}</Text>
-            <Text style={[styles.cell, styles.cellColor]}>{item.color}</Text>
+            <Text style={[styles.cell, { width: 40 }]}>{item.fxh}</Text>
+            <Text style={[styles.cell, { width: 100 }]}>{item.boxCode}</Text>
+            <Text style={[styles.cell, { width: 50 }]}>{item.qty}</Text>
+            <Text style={[styles.cell, { width: 120 }]}>{item.model}</Text>
+            <Text style={[styles.cell, { width: 100 }]}>{item.color}</Text>
+            <Text style={[styles.cell, { width: 120 }]}>{item.orderCode}</Text>
         </TouchableOpacity>
     );
 
     return (
-        <View style={styles.container}>
-            <StatusBar barStyle="dark-content" />
-
+        <SafeAreaView style={styles.container}>
+            <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
             <View style={styles.header}>
-                <Text style={styles.title}>Allocate Scanning Confirm</Text>
-                <Text style={styles.subtitle}>Pallet: {palletCode || 'N/A'}</Text>
-            </View>
-
-            <View style={styles.summaryCard}>
-                <View>
-                    <Text style={styles.summaryLabel}>Total Scanned</Text>
-                    <Text style={styles.summaryValue}>{items.length} Boxes</Text>
+                <View style={styles.headerLeft}>
+                    <TouchableOpacity onPress={handleReturn} activeOpacity={0.7}>
+                        <Image
+                            source={require("../../assets/logo/left.png")}
+                            style={styles.returnLogo}
+                            resizeMode="contain"
+                        />
+                    </TouchableOpacity>
+                    <Text style={styles.headerTitle}>Allocate Confirm</Text>
                 </View>
-                <View style={styles.summaryDivider} />
-                <View>
-                    <Text style={styles.summaryLabel}>Net Quantity</Text>
-                    <Text style={[styles.summaryValue, { color: '#2563eb' }]}>{totalQty} Units</Text>
+                <View style={styles.headerRight}>
+                    <Text style={styles.userNameText}>{gs_userName}</Text>
                 </View>
             </View>
 
-            <View style={styles.tableHeader}>
-                <Text style={[styles.headerCell, styles.cellNo]}>No</Text>
-                <Text style={[styles.headerCell, styles.cellCode]}>Box Code</Text>
-                <Text style={[styles.headerCell, styles.cellQty]}>Qty</Text>
-                <Text style={[styles.headerCell, styles.cellModel]}>Model</Text>
-                <Text style={[styles.headerCell, styles.cellColor]}>Color</Text>
-            </View>
+            <View style={styles.content}>
+                <View style={styles.card}>
+                    <View style={{ marginBottom: 8 }}>
+                        <View style={[styles.input, { backgroundColor: '#0052cc', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 5, marginBottom: 8 }]}>
+                            <Text style={[styles.label, { marginBottom: 0, color: "#FFFFFF" }]}>PALLET</Text>
+                            <Text style={{ fontSize: 12, color: "#FFFFFF", fontWeight: "700" }}>{palletCode}</Text>
+                        </View>
 
-            <FlatList
-                data={items}
-                keyExtractor={(item) => item.id}
-                renderItem={renderItem}
-                contentContainerStyle={styles.listContent}
-                ListEmptyComponent={
-                    <View style={styles.emptyContainer}>
-                        {loading ? <ActivityIndicator color="#2563eb" /> : <Text style={styles.emptyText}>Waiting for scans...</Text>}
+                        <View style={[styles.input, { backgroundColor: '#0052cc', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 5 }]}>
+                            <Text style={[styles.label, { marginBottom: 0, color: "#FFFFFF" }]}>TOTAL QTY</Text>
+                            <Text style={{ fontSize: 12, color: "#FFFFFF", fontWeight: "700" }}>{totalQty}</Text>
+                        </View>
                     </View>
-                }
-            />
+                </View>
 
-            <View style={styles.actionPanel}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={true}>
+                    <View style={{ width: 530 }}>
+                        <View style={styles.tableHeader}>
+                            <Text style={[styles.headerCell, { width: 40 }]}>No</Text>
+                            <Text style={[styles.headerCell, { width: 100 }]}>Box Code</Text>
+                            <Text style={[styles.headerCell, { width: 50 }]}>Qty</Text>
+                            <Text style={[styles.headerCell, { width: 120 }]}>Model</Text>
+                            <Text style={[styles.headerCell, { width: 100 }]}>Color</Text>
+                            <Text style={[styles.headerCell, { width: 120 }]}>Order Code</Text>
+                        </View>
+
+                        <FlatList
+                            data={items}
+                            keyExtractor={(item) => item.id}
+                            renderItem={renderItem}
+                            contentContainerStyle={styles.listContent}
+                            ListEmptyComponent={
+                                <View style={styles.emptyContainer}>
+                                    {loading ? <ActivityIndicator color="#2563eb" /> : <Text style={styles.emptyText}>Waiting for scans...</Text>}
+                                </View>
+                            }
+                        />
+                    </View>
+                </ScrollView>
+            </View>
+
+            <View style={styles.footer}>
                 <View style={styles.buttonRow}>
                     <TouchableOpacity
                         style={[styles.actionBtn, styles.btnSecondary]}
@@ -192,183 +279,74 @@ export default function AllocateSNConfirmBox({ navigation, route }: any) {
                         <Text style={styles.btnTextPrimary}>Confirm</Text>
                     </TouchableOpacity>
                 </View>
-
-                <TouchableOpacity
-                    style={styles.exitBtn}
-                    onPress={() => navigation.goBack()}
-                >
-                    <Text style={styles.exitText}>Close Terminal</Text>
-                </TouchableOpacity>
             </View>
-        </View>
+        </SafeAreaView>
     );
 }
 
+const { width, height } = Dimensions.get("window");
+const isSmallDevice = width < 360;
+const scale = (size: number) => (width / 375) * size;
+
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#f1f5f9',
-    },
+    container: { flex: 1, backgroundColor: '#f8fafc' },
     header: {
-        paddingHorizontal: 20,
-        paddingTop: 20,
-        paddingBottom: 15,
-    },
-    title: {
-        fontSize: 22,
-        fontWeight: '900',
-        color: '#0f172a',
-        letterSpacing: -0.5,
-    },
-    subtitle: {
-        fontSize: 14,
-        color: '#64748b',
-        fontWeight: '600',
-        marginTop: 2,
-    },
-    summaryCard: {
-        flexDirection: 'row',
-        backgroundColor: '#fff',
-        marginHorizontal: 20,
-        padding: 20,
-        borderRadius: 16,
-        justifyContent: 'space-around',
-        alignItems: 'center',
-        marginBottom: 20,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 10,
-        elevation: 3,
-    },
-    summaryDivider: {
-        width: 1,
-        height: '100%',
-        backgroundColor: '#f1f5f9',
-    },
-    summaryLabel: {
-        fontSize: 11,
-        color: '#94a3b8',
-        textTransform: 'uppercase',
-        fontWeight: '800',
-        letterSpacing: 1,
-        marginBottom: 4,
-        textAlign: 'center',
-    },
-    summaryValue: {
-        fontSize: 20,
-        fontWeight: '800',
-        color: '#1e293b',
-        textAlign: 'center',
-    },
-    tableHeader: {
-        flexDirection: 'row',
-        backgroundColor: '#1e293b',
-        marginHorizontal: 10,
-        borderTopLeftRadius: 12,
-        borderTopRightRadius: 12,
-        paddingVertical: 12,
-        paddingHorizontal: 10,
-    },
-    headerCell: {
-        color: '#94a3b8',
-        fontSize: 12,
-        fontWeight: '800',
-        textTransform: 'uppercase',
-        textAlign: 'center',
-    },
-    listContent: {
-        backgroundColor: '#fff',
-        marginHorizontal: 10,
-        borderBottomLeftRadius: 12,
-        borderBottomRightRadius: 12,
-        minHeight: 100,
-    },
-    row: {
-        flexDirection: 'row',
-        paddingVertical: 14,
-        paddingHorizontal: 10,
-        alignItems: 'center',
-        borderBottomWidth: 1,
-        borderBottomColor: '#f1f5f9',
-    },
-    rowEven: { backgroundColor: '#fff' },
-    rowOdd: { backgroundColor: '#f8fafc' },
-    cell: {
-        fontSize: 12,
-        color: '#334155',
-        fontWeight: '600',
-        textAlign: 'center',
-    },
-    cellNo: { flex: 0.6 },
-    cellCode: {
-        flex: 2,
-        textAlign: 'left',
-        paddingLeft: 8,
-        color: '#2563eb',
-        fontWeight: '800',
-    },
-    cellQty: { flex: 0.8 },
-    cellModel: { flex: 1.5 },
-    cellColor: { flex: 1.2 },
-    emptyContainer: {
-        padding: 40,
-        alignItems: 'center',
-    },
-    emptyText: {
-        color: '#94a3b8',
-        fontWeight: '600',
-        fontSize: 14,
-    },
-    actionPanel: {
-        padding: 20,
-        backgroundColor: '#fff',
-        borderTopWidth: 1,
-        borderTopColor: '#e2e8f0',
-    },
-    buttonRow: {
-        flexDirection: 'row',
-        gap: 12,
-    },
-    actionBtn: {
-        flex: 1,
-        height: 56,
-        borderRadius: 14,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    btnPrimary: {
-        backgroundColor: '#2563eb',
-        shadowColor: '#2563eb',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.2,
-        shadowRadius: 8,
+        backgroundColor: "#0052cc",
+        paddingHorizontal: width * 0.05,
+        height: scale(56),
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
         elevation: 4,
     },
-    btnSecondary: {
-        backgroundColor: '#f1f5f9',
-        borderWidth: 1,
-        borderColor: '#e2e8f0',
+    headerLeft: {
+        flexDirection: "row",
+        alignItems: "center",
     },
-    btnTextPrimary: {
-        color: '#fff',
-        fontSize: 16,
-        fontWeight: '800',
+    returnLogo: {
+        width: scale(24),
+        height: scale(24),
+        marginRight: 10,
+        tintColor: "#FFFFFF",
     },
-    btnTextSecondary: {
-        color: '#475569',
-        fontSize: 16,
-        fontWeight: '700',
+    headerTitle: {
+        color: "#FFFFFF",
+        fontSize: isSmallDevice ? scale(14) : scale(16),
+        fontWeight: "900",
     },
-    exitBtn: {
-        marginTop: 15,
-        alignSelf: 'center',
-        padding: 10,
+    headerRight: {
+        flexDirection: "row",
+        alignItems: "center",
     },
-    exitText: {
-        color: '#94a3b8',
-        fontWeight: '700',
-        fontSize: 14,
-        textDecorationLine: 'underline',
+    userNameText: {
+        color: "#FFFFFF",
+        fontSize: scale(12),
+        fontWeight: "700",
+        marginRight: 1,
     },
+    content: { flex: 1, padding: 16 },
+    card: { backgroundColor: "#FFF", borderRadius: 16, padding: 12, marginBottom: 12, elevation: 2, borderWidth: 1, borderColor: "#0052cc" },
+    label: { fontSize: 11, fontWeight: "700", color: "#64748B", marginBottom: 4, textTransform: "uppercase" },
+    input: { backgroundColor: "#0052cc", padding: 3, borderRadius: 10, fontSize: 12, color: "#FFFFFF", borderWidth: 1, borderColor: "#CBD5E1" },
+    palletInfo: { backgroundColor: "#F1F5F9", padding: 10, borderRadius: 12, borderWidth: 1, borderColor: "#CBD5E1", marginBottom: 10 },
+    palletLabel: { color: "#64748B", fontSize: 10, textTransform: "uppercase", fontWeight: "700" },
+    palletValue: { color: "#1E293B", fontSize: 15, fontWeight: "800", marginTop: 2 },
+    summaryRow: { flexDirection: 'row', justifyContent: 'space-around' },
+    summaryItem: { alignItems: 'center' },
+    summaryLabel: { fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', fontWeight: '800' },
+    summaryValue: { fontSize: 18, fontWeight: '800', color: '#1e293b' },
+    tableHeader: { flexDirection: 'row', backgroundColor: '#0052cc', paddingVertical: 10, borderRadius: 8, marginBottom: 4 },
+    headerCell: { color: '#FFFFFF', fontSize: 10, fontWeight: '800', textTransform: 'uppercase', textAlign: 'center' },
+    listContent: { paddingBottom: 20 },
+    row: { flexDirection: 'row', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f1f5f9', backgroundColor: '#fff', borderRadius: 8, marginBottom: 4, alignItems: 'center' },
+    cell: { fontSize: 11, color: '#334155', fontWeight: '600', textAlign: 'center' },
+    emptyContainer: { padding: 40, alignItems: 'center' },
+    emptyText: { color: '#94a3b8', fontWeight: '600', fontSize: 14 },
+    footer: { padding: 16, marginTop: -16 },
+    buttonRow: { flexDirection: 'row', gap: 12 },
+    actionBtn: { flex: 1, height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+    btnPrimary: { backgroundColor: '#2563eb' },
+    btnSecondary: { backgroundColor: '#f1f5f9', borderWidth: 1, borderColor: '#e2e8f0' },
+    btnTextPrimary: { color: '#fff', fontSize: 15, fontWeight: '800' },
+    btnTextSecondary: { color: '#475569', fontSize: 15, fontWeight: '700' },
 });

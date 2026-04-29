@@ -1,16 +1,32 @@
 import React, { createContext, useContext, useState } from "react";
-/* =========================
-   Context
-========================= */
-/* =========================
-   Type pour le contexte global
-========================= */
 
 
+/* =========================
+   Type Global Context
+========================= */
 type GlobalContextType = {
+  // BaseSignInfo
+  operateUserCode: string;
+  setOperateUserCode: (v: string) => void;
+  operateUserName: string;
+  setOperateUserName: (v: string) => void;
+  operateWareHouseCode: string;
+  setOperateWareHouseCode: (v: string) => void;
 
+  operateRandomNumber: string;
+  setOperateRandomNumber: (v: string) => void;
+
+  operateSign: string;
+  setOperateSign: (v: string) => void;
+
+  operateVersion: string;
+  setOperateVersion: (v: string) => void;
+
+
+  // URL
   gsURL: string;
   setgs_gsURL: (v: string) => void;
+
   // Factory
   gs_factoryCode: string;
   setgs_factoryCode: (v: string) => void;
@@ -61,7 +77,7 @@ type GlobalContextType = {
 };
 
 /* =========================
-   Création du contexte
+   Create Context
 ========================= */
 const GlobalContext = createContext<GlobalContextType | null>(null);
 
@@ -72,7 +88,16 @@ export const GlobalProvider = ({ children }: { children: React.ReactNode }) => {
 
 
 
-  const [gsURL, _setgsgsURL] = useState("http://192.168.137.1:7278"); 
+  const [gsURL, _setgsgsURL] = useState("http://192.168.137.32:7278");
+
+  // BaseSignInfo
+  const [operateUserCode, _setOperateUserCode] = useState("");
+  const [operateUserName, _setOperateUserName] = useState("");
+  const [operateWareHouseCode, _setOperateWareHouseCode] = useState("");
+  const [operateRandomNumber, _setOperateRandomNumber] = useState("");
+  const [operateSign, _setOperateSign] = useState("");
+  const [operateVersion, _setOperateVersion] = useState("1.0");
+
   // Factory
   const [gs_factoryCode, _setFactoryCode] = useState("001");
 
@@ -102,13 +127,38 @@ export const GlobalProvider = ({ children }: { children: React.ReactNode }) => {
   // IP
   const [gs_IPAddress, _setIPAddress] = useState("");
 
-  // Web service
-  const [g_webUrl, _setWebUrl] = useState("https://mespdamobile.condor.dz/WINCEWeb.asmx");
+  // Web config
+  const [g_webUrl, _setWebUrl] = useState(
+    "https://mespdamobile.condor.dz/WINCEWeb.asmx"
+  );
   const [g_isRealUrl, _setIsRealUrl] = useState(true);
+
+
+
+
+  
 
   return (
     <GlobalContext.Provider
       value={{
+        operateUserCode,
+        setOperateUserCode: _setOperateUserCode,
+
+        operateUserName,
+        setOperateUserName: _setOperateUserName,
+
+        operateWareHouseCode,
+        setOperateWareHouseCode: _setOperateWareHouseCode,
+
+        operateRandomNumber,
+        setOperateRandomNumber: _setOperateRandomNumber,
+
+        operateSign,
+        setOperateSign: _setOperateSign,
+
+        operateVersion,
+        setOperateVersion: _setOperateVersion,
+
 
         gsURL,
         setgs_gsURL: _setgsgsURL,
@@ -159,7 +209,7 @@ export const GlobalProvider = ({ children }: { children: React.ReactNode }) => {
 };
 
 /* =========================
-   Hook d’accès global
+   Hook
 ========================= */
 export const useGlobal = () => {
   const ctx = useContext(GlobalContext);

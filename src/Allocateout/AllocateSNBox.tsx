@@ -1,16 +1,22 @@
 import React, { useState, useEffect, useMemo } from "react";
+import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   View,
   Text,
+  TextInput,
   FlatList,
+  ScrollView,
   TouchableOpacity,
   StyleSheet,
   Alert,
   StatusBar,
   ActivityIndicator,
   ListRenderItem,
+  Image,
+  Dimensions,
 } from "react-native";
 import { useGlobal } from "../../GlobalContext.tsx";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 interface BoxDetail {
   id: string;
@@ -25,31 +31,63 @@ interface BoxDetail {
 export default function AllocateSNBox({ navigation, route }: any) {
   const { allocateCode } = route.params || {};
   const global = useGlobal();
-  const { gsURL, gs_factoryCode, gs_wareCode } = global;
+  const { gsURL, gs_factoryCode, gs_wareCode, gs_userName,operateUserCode, operateUserName, operateWareHouseCode, operateRandomNumber, operateSign, operateVersion, } = global;
   const BASE_URL = gsURL;
+  const [token, setToken] = useState("");
 
   const [loading, setLoading] = useState(false);
   const [items, setItems] = useState<BoxDetail[]>([]);
   const [selectedItem, setSelectedItem] = useState<BoxDetail | null>(null);
 
+
   useEffect(() => {
-    fetchBoxDetails();
+    const loadToken = async () => {
+      const t = await AsyncStorage.getItem("userToken");
+      console.log("TOKEN IN Allocateout", t);
+      if (t) setToken(t);
+    };
+
+    loadToken();
   }, []);
+
+
+  useEffect(() => {
+    if (token) {
+      fetchBoxDetails();
+    }
+  }, [token]);
 
   const fetchBoxDetails = async () => {
     setLoading(true);
     try {
       const response = await fetch(`${BASE_URL}/api/AllocatePalletSNBox`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, },
         body: JSON.stringify({
+          operateUserCode, operateUserName, operateWareHouseCode, operateRandomNumber, operateSign, operateVersion,
           factoryCode: gs_factoryCode,
           wareHouseCode: gs_wareCode,
           allocateCode: allocateCode
         })
       });
 
+      if (response.status === 401) {
+        Alert.alert("Unauthorized", "Token expired or invalid.");
+        return;
+      }
+
+      if (response.status === 403) {
+        Alert.alert("Access Denied", "You do not have permission.");
+        return;
+      }
+
+
       const result = await response.json();
+      if (result.code === 500) {
+        Alert.alert("Error", result.message);
+        navigation.goBack();
+        return;
+      }
       if (result.message === 'success' && result.data && result.data.length > 0) {
         const mappedData = result.data.map((row: any, index: number) => ({
           id: index.toString(),
@@ -90,236 +128,155 @@ export default function AllocateSNBox({ navigation, route }: any) {
       onPress={() => setSelectedItem(item)}
       style={[
         styles.row,
-        index % 2 === 0 ? styles.rowEven : styles.rowOdd,
-        selectedItem?.id === item.id && { backgroundColor: '#dbeafe' },
+        selectedItem?.id === item.id && styles.selectedRow,
       ]}
     >
-      <Text style={[styles.cell, styles.cellNo]}>{index + 1}</Text>
-      <Text style={[styles.cell, styles.cellPallet]}>{item.palletCode}</Text>
-      <Text style={[styles.cell, styles.cellBox]}>{item.boxCode}</Text>
-      <Text style={[styles.cell, styles.cellQty]}>{item.qty}</Text>
-      <Text style={[styles.cell, styles.cellModel]}>{item.model}</Text>
+      <Text style={[styles.cell, { width: 40 }]}>{index + 1}</Text>
+      <Text style={[styles.cell, { width: 100 }]}>{item.palletCode}</Text>
+      <Text style={[styles.cell, { width: 100 }]}>{item.boxCode}</Text>
+      <Text style={[styles.cell, { width: 50 }]}>{item.qty}</Text>
+      <Text style={[styles.cell, { width: 120 }]}>{item.model}</Text>
+      <Text style={[styles.cell, { width: 100 }]}>{item.color}</Text>
     </TouchableOpacity>
   );
 
+  const handleReturn = () => {
+    navigation.goBack();
+  };
+
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="dark-content" />
+    <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
 
       <View style={styles.header}>
-        <Text style={styles.title}>Allocate SN Details</Text>
-        <Text style={styles.subtitle}>Code: {allocateCode}</Text>
-      </View>
-
-      <View style={styles.summaryCard}>
-        <View>
-          <Text style={styles.summaryLabel}>Total Boxes</Text>
-          <Text style={styles.summaryValue}>{items.length}</Text>
+        <View style={styles.headerLeft}>
+          <TouchableOpacity onPress={handleReturn} activeOpacity={0.7}>
+            <Image
+              source={require("../../assets/logo/left.png")}
+              style={styles.returnLogo}
+              resizeMode="contain"
+            />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>SN Details</Text>
         </View>
-        <View style={styles.summaryDivider} />
-        <View>
-          <Text style={styles.summaryLabel}>Total Quantity</Text>
-          <Text style={[styles.summaryValue, { color: '#2563eb' }]}>{totalQty} Units</Text>
+
+        <View style={styles.headerRight}>
+          <Text style={styles.userNameText}>{gs_userName}</Text>
         </View>
       </View>
 
-      <View style={styles.tableHeader}>
-        <Text style={[styles.headerCell, styles.cellNo]}>No</Text>
-        <Text style={[styles.headerCell, styles.cellPallet]}>Pallet</Text>
-        <Text style={[styles.headerCell, styles.cellBox]}>Box</Text>
-        <Text style={[styles.headerCell, styles.cellQty]}>Qty</Text>
-        <Text style={[styles.headerCell, styles.cellModel]}>Model</Text>
-      </View>
-
-      <FlatList
-        data={items}
-        keyExtractor={(item) => item.id}
-        renderItem={renderItem}
-        contentContainerStyle={styles.listContent}
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            {loading ? <ActivityIndicator color="#2563eb" /> : <Text style={styles.emptyText}>No data available</Text>}
+      <View style={styles.content}>
+        <View style={styles.statsCard}>
+          <View style={styles.statBox}>
+            <Text style={styles.statLabel}>Total Quantity</Text>
+            <Text style={[styles.statValue, { color: '#FFFFFF' }]}>{totalQty}</Text>
           </View>
-        }
-      />
+        </View>
 
-      <View style={styles.actionPanel}>
-        <View style={styles.buttonRow}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={true}>
+          <View style={{ width: 510 }}>
+            <FlatList
+              data={items}
+              keyExtractor={(item) => item.id}
+              renderItem={renderItem}
+              ListHeaderComponent={
+                <View style={styles.tableHeader}>
+                  <Text style={[styles.headerCell, { width: 40 }]}>No</Text>
+                  <Text style={[styles.headerCell, { width: 100 }]}>Pallet</Text>
+                  <Text style={[styles.headerCell, { width: 100 }]}>Box</Text>
+                  <Text style={[styles.headerCell, { width: 50 }]}>Qty</Text>
+                  <Text style={[styles.headerCell, { width: 120 }]}>Model</Text>
+                  <Text style={[styles.headerCell, { width: 100 }]}>Color</Text>
+                </View>
+              }
+              stickyHeaderIndices={[0]}
+              ListEmptyComponent={
+                <View style={styles.emptyContainer}>
+                  {loading ? <ActivityIndicator color="#4F46E5" /> : <Text style={styles.emptyText}>No data available</Text>}
+                </View>
+              }
+            />
+          </View>
+        </ScrollView>
+
+        <View style={styles.actions}>
           <TouchableOpacity
-            style={[styles.actionBtn, styles.btnPrimary]}
+            style={styles.primaryButton}
             onPress={showBarcodeDetails}
             activeOpacity={0.8}
           >
-            <Text style={styles.btnTextPrimary}>SN Detail</Text>
+            <Text style={styles.primaryButtonText}>SN Detail</Text>
           </TouchableOpacity>
         </View>
-
-        <TouchableOpacity
-          style={styles.exitBtn}
-          onPress={() => navigation.goBack()}
-        >
-          <Text style={styles.exitText}>Close Terminal</Text>
-        </TouchableOpacity>
       </View>
-    </View>
+    </SafeAreaView>
   );
 }
 
+const { width, height } = Dimensions.get("window");
+const isSmallDevice = width < 360;
+const scale = (size: number) => (width / 375) * size;
+
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f1f5f9',
-  },
+  container: { flex: 1, backgroundColor: "#F8FAFC" },
   header: {
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 15,
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: '900',
-    color: '#0f172a',
-    letterSpacing: -0.5,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: '#64748b',
-    fontWeight: '600',
-    marginTop: 2,
-  },
-  summaryCard: {
-    flexDirection: 'row',
-    backgroundColor: '#fff',
-    marginHorizontal: 20,
-    padding: 20,
-    borderRadius: 16,
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    elevation: 3,
-  },
-  summaryDivider: {
-    width: 1,
-    height: '100%',
-    backgroundColor: '#f1f5f9',
-  },
-  summaryLabel: {
-    fontSize: 11,
-    color: '#94a3b8',
-    textTransform: 'uppercase',
-    fontWeight: '800',
-    letterSpacing: 1,
-    marginBottom: 4,
-    textAlign: 'center',
-  },
-  summaryValue: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#1e293b',
-    textAlign: 'center',
-  },
-  tableHeader: {
-    flexDirection: 'row',
-    backgroundColor: '#1e293b',
-    marginHorizontal: 10,
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 10,
-  },
-  headerCell: {
-    color: '#94a3b8',
-    fontSize: 12,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    textAlign: 'center',
-  },
-  listContent: {
-    backgroundColor: '#fff',
-    marginHorizontal: 10,
-    borderBottomLeftRadius: 12,
-    borderBottomRightRadius: 12,
-    minHeight: 100,
-  },
-  row: {
-    flexDirection: 'row',
-    paddingVertical: 14,
-    paddingHorizontal: 10,
-    alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: '#f1f5f9',
-  },
-  rowEven: { backgroundColor: '#fff' },
-  rowOdd: { backgroundColor: '#f8fafc' },
-  cell: {
-    fontSize: 11,
-    color: '#334155',
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  cellNo: { flex: 0.5 },
-  cellPallet: { flex: 1.5 },
-  cellBox: {
-    flex: 2,
-    textAlign: 'left',
-    paddingLeft: 8,
-    color: '#2563eb',
-    fontWeight: '800',
-  },
-  cellQty: { flex: 0.8 },
-  cellModel: { flex: 1.5 },
-  emptyContainer: {
-    padding: 40,
-    alignItems: 'center',
-  },
-  emptyText: {
-    color: '#94a3b8',
-    fontWeight: '600',
-    fontSize: 14,
-  },
-  actionPanel: {
-    padding: 20,
-    backgroundColor: '#fff',
-    borderTopWidth: 1,
-    borderTopColor: '#e2e8f0',
-  },
-  buttonRow: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  actionBtn: {
-    flex: 1,
-    height: 56,
-    borderRadius: 14,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  btnPrimary: {
-    backgroundColor: '#2563eb',
-    shadowColor: '#2563eb',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
+    backgroundColor: "#0052cc",
+    paddingHorizontal: width * 0.05,
+    height: scale(56),
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     elevation: 4,
   },
-  btnTextPrimary: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '800',
+  headerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
   },
-  exitBtn: {
-    marginTop: 15,
-    alignSelf: 'center',
-    padding: 10,
+  returnLogo: {
+    width: scale(24),
+    height: scale(24),
+    marginRight: 10,
+    tintColor: "#FFFFFF",
   },
-  exitText: {
-    color: '#94a3b8',
-    fontWeight: '700',
-    fontSize: 14,
-    textDecorationLine: 'underline',
+  headerTitle: {
+    color: "#FFFFFF",
+    fontSize: isSmallDevice ? scale(14) : scale(16),
+    fontWeight: "900",
   },
+  headerRight: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  userNameText: {
+    color: "#FFFFFF",
+    fontSize: scale(12),
+    fontWeight: "700",
+    marginRight: 1,
+  },
+  content: { flex: 1, padding: 16 },
+  statsCard: { paddingBottom: 16, gap: 10 },
+  statBox: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    backgroundColor: "#0052cc",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: "#E2E8F0"
+  },
+  statLabel: { color: "#FFFFFF", fontSize: 11, fontWeight: "700", textTransform: "uppercase" },
+  statValue: { color: "#FFFFFF", fontSize: 12, fontWeight: "800" },
+  tableHeader: { flexDirection: "row", backgroundColor: "#0052cc", paddingVertical: 10, borderRadius: 8, marginBottom: 8 },
+  headerCell: { fontSize: 10, fontWeight: "900", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
+  row: { flexDirection: "row", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#F1F5F9", backgroundColor: "#FFF", borderRadius: 8, marginBottom: 4 },
+  cell: { fontSize: 11, color: "#334155", textAlign: "center", fontWeight: "600" },
+  selectedRow: { backgroundColor: "#E0E7FF", borderColor: "#4F46E5", borderWidth: 1 },
+  emptyContainer: { padding: 40, alignItems: "center" },
+  emptyText: { color: "#94A3B8", fontWeight: "600", fontSize: 14 },
+  actions: { marginTop: 16 },
+  primaryButton: { backgroundColor: "#4F46E5", height: 45, padding: 14, borderRadius: 12, justifyContent: "center", alignItems: "center", elevation: 4 },
+  primaryButtonText: { color: "#fff", fontWeight: "900", fontSize: 13 },
 });

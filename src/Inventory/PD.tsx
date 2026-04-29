@@ -1,19 +1,167 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import { SafeAreaView } from 'react-native-safe-area-context';
 import {
     View,
     Text,
     StyleSheet,
-    SafeAreaView,
     TouchableOpacity,
-    FlatList,
     ActivityIndicator,
     StatusBar,
     Alert,
     TextInput,
     ScrollView,
-    Dimensions, Platform
+    Dimensions,
+    Image,
+    FlatList,
+    Modal,
 } from "react-native";
 import { useGlobal } from "../../GlobalContext";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
+const warehouseIcon = require("../../assets/logo/warehouse.png");
+
+const { width, height } = Dimensions.get("window");
+const isSmallDevice = width < 360;
+const scale = (size: number) => (width / 375) * size;
+
+export type CustomInputRef = {
+    focus: () => void;
+};
+
+interface CustomInputProps {
+    label?: string;
+    value?: any;
+    placeholder?: string;
+    isSelect?: boolean;
+    isPassword?: boolean;
+    onChangeText: (val: any) => void;
+    options?: any[];
+    inputRef?: any;
+    onSubmitEditing?: (e: any) => void;
+    showSoftInput?: boolean;
+    onBlur?: () => void;
+    icon?: any;
+}
+
+const CustomInput = React.forwardRef<CustomInputRef, CustomInputProps>(
+    (
+        {
+            label,
+            value,
+            placeholder,
+            isSelect = false,
+            isPassword = false,
+            onChangeText,
+            options = [],
+            inputRef,
+            onSubmitEditing,
+            showSoftInput = true,
+            onBlur,
+            icon,
+        },
+        ref
+    ) => {
+        const [showModal, setShowModal] = useState(false);
+        const [isFocused, setIsFocused] = useState(false);
+
+        const hiddenInputRef = useRef<TextInput>(null);
+
+        React.useImperativeHandle(ref, () => ({
+            focus: () => hiddenInputRef.current?.focus(),
+        }));
+
+        const handleSelect = (item: any) => {
+            onChangeText(item);
+            setShowModal(false);
+        };
+
+        return (
+            <View style={styles.inputWrapper}>
+                {label && <Text style={styles.label}>{label}</Text>}
+                {isSelect ? (
+                    <TouchableOpacity
+                        style={[
+                            styles.inputContainer,
+                            isFocused ? styles.inputFocused : null,
+                            isSelect && value ? { borderWidth: 0, borderBottomWidth: 1, backgroundColor: 'transparent', paddingHorizontal: 0, borderRadius: 0 } : null
+                        ]}
+                        onPress={() => setShowModal(true)}
+                    >
+                        {icon && <Image source={icon} style={styles.inputIcon} />}
+                        <Text style={[
+                            value ? styles.input : styles.placeholderText,
+                            isSelect && value ? { backgroundColor: 'transparent', borderWidth: 0, paddingHorizontal: 0 } : null,
+                            { flex: 1 }
+                        ]}>
+                            {value || placeholder}
+                        </Text>
+                        <Text style={styles.chevronIcon}>▼</Text>
+                    </TouchableOpacity>
+                ) : (
+                    <View
+                        style={[styles.inputContainer, isFocused ? styles.inputFocused : null]}
+                    >
+                        {icon && <Image source={icon} style={styles.inputIcon} />}
+                        <TextInput
+                            ref={inputRef}
+                            value={value}
+                            onChangeText={onChangeText}
+                            placeholder={placeholder}
+                            placeholderTextColor="#94a3b8"
+                            style={styles.input}
+                            secureTextEntry={isPassword}
+                            onFocus={() => setIsFocused(true)}
+                            onBlur={() => {
+                                setIsFocused(false);
+                                if (onBlur) onBlur();
+                            }}
+                            onSubmitEditing={onSubmitEditing}
+                            blurOnSubmit={false}
+                            returnKeyType="next"
+                            showSoftInputOnFocus={showSoftInput}
+                        />
+                    </View>
+                )}
+
+                {isSelect && (
+                    <Modal transparent visible={showModal} animationType="fade">
+                        <TouchableOpacity
+                            style={styles.modalOverlay}
+                            onPress={() => setShowModal(false)}
+                        >
+                            <View style={styles.modalContent}>
+                                <Text style={styles.modalTitle}>Select {label}</Text>
+                                <FlatList
+                                    data={options}
+                                    keyExtractor={(item: any, index: number) =>
+                                        `${item.ClassCode ?? item.wareHouseCode ?? item.inventoryNo ?? item}_${index}`
+                                    }
+                                    renderItem={({ item }) => (
+                                        <TouchableOpacity
+                                            style={styles.optionItem}
+                                            onPress={() => handleSelect(item)}
+                                        >
+                                            <Text style={styles.optionText}>
+                                                {item.ClassName ?? item.wareHouseName ?? item.inventoryNo ?? item}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    )}
+                                />
+                            </View>
+                        </TouchableOpacity>
+                    </Modal>
+                )}
+
+                {isSelect && (
+                    <TextInput
+                        style={{ height: 0, width: 0, padding: 0, margin: 0 }}
+                        ref={hiddenInputRef}
+                    />
+                )}
+            </View>
+        );
+    }
+);
 
 interface ScannedItem {
     id: string;
@@ -29,8 +177,11 @@ interface InventoryOrder {
 
 export default function PD({ navigation }: any) {
     const global = useGlobal();
-    const { gsURL, gs_factoryCode, gs_wareCode, gs_userCode } = global;
+    const { gsURL, gs_factoryCode, gs_wareCode, gs_userCode, gs_userName,
+        operateUserCode, operateUserName, operateWareHouseCode, operateRandomNumber, operateSign, operateVersion,
+     } = global;
     const BASE_URL = gsURL;
+    const [token, setToken] = useState("");
 
     const [loading, setLoading] = useState(false);
     const [orders, setOrders] = useState<InventoryOrder[]>([]);
@@ -45,6 +196,7 @@ export default function PD({ navigation }: any) {
     const [showKeyboard, setShowKeyboard] = useState(false);
 
     const barcodeInputRef = useRef<TextInput>(null);
+    const orderRef = useRef<CustomInputRef>(null);
 
     const ensureFocus = () => {
         if (barcodeInputRef.current) {
@@ -52,93 +204,54 @@ export default function PD({ navigation }: any) {
         }
     };
 
-    const fetchOrders = useCallback(async () => {
-        setLoading(true);
-        try {
-            const query = new URLSearchParams({
-                factoryCode: gs_factoryCode,
-                warehouseCode: gs_wareCode,
-                inventoryNo: "",
-            }).toString();
+    useEffect(() => {
+        const loadToken = async () => {
+            const t = await AsyncStorage.getItem("userToken");
+            console.log("TOKEN IN Allocateout", t);
+            if (t) setToken(t);
+        };
 
-            const response = await fetch(`${BASE_URL}/api/Inventory/GetInventoryOrder?${query}`, {
-                method: "GET",
-                headers: { "Content-Type": "application/json" },
-            });
-
-            const result = await response.json();
-            console.log("getinvenoty1 ", result);
-            if (result.message === "success" && result.data) {
-                setOrders(result.data);
-                
-
-            } else {
-                setOrders([]);
-            }
-        } catch (err: any) {
-            Alert.alert("Error", "Failed to fetch inventory orders: " + err.message);
-
-        } finally {
-            setLoading(false);
-        }
-    }, [gs_factoryCode, gs_wareCode, BASE_URL]);
+        loadToken();
+    }, []);
 
     useEffect(() => {
-        fetchOrders();
-    }, [fetchOrders]);
-
-    const fetchOrderDetails = async (orderNo: string) => {
-        if (!orderNo) return;
-        setLoading(true);
-        try {
-
-            const url = `${BASE_URL}/api/Inventory/GetInventoryOrder?factoryCode=${encodeURIComponent(gs_factoryCode)}&warehouseCode=${encodeURIComponent(gs_wareCode)}&inventoryNo=${encodeURIComponent(orderNo)}`;
-
-            const response = await fetch(url, {
-                method: "GET",
-                headers: { "Content-Type": "application/json" },
-            });
-
-            const result = await response.json();
-            if (result.message === "success" && result.data && result.data.length > 0) {
-                barcodeInputRef.current?.focus();
-                const order = result.data[0];
-                setInventoryType(order.inventoryType || "");
-                setModel(order.model || "");
-                setStatus(order.inventoryflag || "");
-
-                const flag = (order.inventoryflag || "").toLowerCase();
-                setShowConfirmBtn(flag === "notstart" || flag === "start");
-            } else {
-                setInventoryType("");
-                setModel("");
-                setStatus("Finish");
-                setShowConfirmBtn(false);
-            }
-            fetchHistory(orderNo);
-        } catch (err: any) {
-            Alert.alert("Error", "Failed to fetch order details: " + err.message);
-        } finally {
-            setLoading(false);
+        if (token) {
+            fetchOrders();
         }
-    };
+    }, [token]);
 
-    const fetchHistory = async (orderNo: string) => {
+
+
+    const fetchHistory = useCallback(async (orderNo: string) => {
         if (!orderNo) return;
         try {
             const url = `${BASE_URL}/api/InventoryHistory/${encodeURIComponent(gs_factoryCode)}/${encodeURIComponent(gs_wareCode)}/${encodeURIComponent(orderNo)}`;
 
             const response = await fetch(url, {
                 method: "GET",
-                headers: { "Content-Type": "application/json" },
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, },
             });
+
+            if (response.status === 401) {
+                Alert.alert("Unauthorized", "Token expired or invalid.");
+                return;
+            }
+
+            if (response.status === 403) {
+                Alert.alert("Access Denied", "You do not have permission.");
+                return;
+            }
 
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
 
             const result = await response.json();
-            console.log("inventhistory", result)
+            if (result.code === 500) {
+                Alert.alert("Error", result.message);
+                navigation.goBack();
+                return;
+            }
             if (result.message === "success" && result.data) {
                 let total = 0;
                 const mapped = result.data.map((item: any, index: number) => {
@@ -161,7 +274,106 @@ export default function PD({ navigation }: any) {
             console.error("History fetch error:", err);
             Alert.alert("Error", "Failed to fetch inventory history: " + err.message);
         }
-    };
+    }, [BASE_URL, gs_factoryCode, gs_wareCode, token]);
+
+    const fetchOrderDetails = useCallback(async (orderNo: string) => {
+        if (!orderNo) return;
+        setLoading(true);
+        try {
+            const url = `${BASE_URL}/api/Inventory/GetInventoryOrder?factoryCode=${encodeURIComponent(gs_factoryCode)}&warehouseCode=${encodeURIComponent(gs_wareCode)}&inventoryNo=${encodeURIComponent(orderNo)}`;
+
+            const response = await fetch(url, {
+                method: "GET",
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, },
+            });
+
+            if (response.status === 401) {
+                Alert.alert("Unauthorized", "Token expired or invalid.");
+                return;
+            }
+
+            if (response.status === 403) {
+                Alert.alert("Access Denied", "You do not have permission.");
+                return;
+            }
+
+            const result = await response.json();
+
+            if (result.code === 500) {
+                Alert.alert("Error", result.message);
+                navigation.goBack();
+                return;
+            }
+            if (result.message === "success" && result.data && result.data.length > 0) {
+                barcodeInputRef.current?.focus();
+                const order = result.data[0];
+                setInventoryType(order.inventoryType || "");
+                setModel(order.model || "");
+                setStatus(order.inventoryflag || "");
+
+                const flag = (order.inventoryflag || "").toLowerCase();
+                setShowConfirmBtn(flag === "notstart" || flag === "start");
+            } else {
+                setInventoryType("");
+                setModel("");
+                setStatus("Finish");
+                setShowConfirmBtn(false);
+            }
+            fetchHistory(orderNo);
+        } catch (err: any) {
+            Alert.alert("Error", "Failed to fetch order details: " + err.message);
+        } finally {
+            setLoading(false);
+        }
+    }, [BASE_URL, gs_factoryCode, gs_wareCode, token, fetchHistory]);
+
+    const fetchOrders = useCallback(async () => {
+        setLoading(true);
+        try {
+            const query = new URLSearchParams({
+                factoryCode: gs_factoryCode,
+                warehouseCode: gs_wareCode,
+                inventoryNo: "",
+            }).toString();
+
+            const response = await fetch(`${BASE_URL}/api/Inventory/GetInventoryOrder?${query}`, {
+                method: "GET",
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, },
+            });
+
+            if (response.status === 401) {
+                Alert.alert("Unauthorized", "Token expired or invalid.");
+                return;
+            }
+
+            if (response.status === 403) {
+                Alert.alert("Access Denied", "You do not have permission.");
+                return;
+            }
+
+            const result = await response.json();
+            if (result.code === 500) {
+                Alert.alert("Error", result.message);
+                navigation.goBack();
+                return;
+            }
+            if (result.message === "success" && result.data) {
+                setOrders(result.data);
+            } else {
+                setOrders([]);
+            }
+        } catch (err: any) {
+            Alert.alert("Error", "Failed to fetch inventory orders: " + err.message);
+        } finally {
+            setLoading(false);
+        }
+    }, [gs_factoryCode, gs_wareCode, BASE_URL, token]);
+
+
+
+
+
+
 
     const handleScan = async (text?: string) => {
         if (!selectedOrder) {
@@ -173,45 +385,71 @@ export default function PD({ navigation }: any) {
 
         setLoading(true);
         try {
-            // 1. Get Barcode Type
             const typeRes = await fetch(`${BASE_URL}/api/BarcodeType`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ factoryCode: gs_factoryCode, scanCode: code }),
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, },
+                body: JSON.stringify({ 
+                    operateUserCode, operateUserName, operateWareHouseCode, operateRandomNumber, operateSign, operateVersion,
+                    factoryCode: gs_factoryCode, scanCode: code }),
             });
+
+            if (typeRes.status === 401) {
+                Alert.alert("Unauthorized", "Token expired or invalid.");
+                return;
+            }
+
+            if (typeRes.status === 403) {
+                Alert.alert("Access Denied", "You do not have permission.");
+                return;
+            }
             const typeResult = await typeRes.json();
+            if (typeResult.code === 500) {
+                Alert.alert("Error", typeResult.message);
+                navigation.goBack();
+                return;
+            }
             let scanType = "";
             if (typeResult.message === "success" && typeResult.data && typeResult.data.length > 0) {
                 scanType = typeResult.data[0].scanType;
             }
-            //change it after
             if (scanType === "pallet" || scanType === "box" || scanType === "sn" || code === "P0140480205") {
-                // 2. Check and Write Scan
                 const scanRes = await fetch(`${BASE_URL}/api/InventoryScan/CheckAndWriteScan`, {
                     method: "POST",
-                    headers: { "Content-Type": "application/json" },
+                    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, },
                     body: JSON.stringify({
+                        operateUserCode, operateUserName, operateWareHouseCode, operateRandomNumber, operateSign, operateVersion,
                         factoryCode: gs_factoryCode,
                         warehouseCode: gs_wareCode,
                         inventoryNo: selectedOrder,
                         inventoryType: inventoryType,
                         inventoryModel: model,
                         scanCode: code,
-                        scanType: scanType || "pallet", // use detected type or fallback to pallet
+                        scanType: scanType || "pallet",
                         userCode: gs_userCode,
                     }),
                 });
+
+                if (scanRes.status === 401) {
+                    Alert.alert("Unauthorized", "Token expired or invalid.");
+                    return;
+                }
+
+                if (scanRes.status === 403) {
+                    Alert.alert("Access Denied", "You do not have permission.");
+                    return;
+                }
                 const scanResult = await scanRes.json();
-                console.log("checkandwritescan ", scanResult);
+                console.log("inventory", scanResult)
                 if (scanResult.message === "success" && scanResult.data) {
                     const resultData = scanResult.data;
 
                     if (resultData.isok === "0") {
-                        Alert.alert("Error", resultData.retstr || "Scan failed");
+                        -
+                            Alert.alert("Error", resultData.retstr || "Scan failed");
                     } else {
                         Alert.alert("Success", "scan successfully.");
                         const addedQty = parseInt(resultData.qty || "0");
-                        
+
                         const newItem = {
                             id: Date.now().toString(),
                             barcode: resultData.barcode,
@@ -219,7 +457,6 @@ export default function PD({ navigation }: any) {
                             color: resultData.color,
                             qty: resultData.qty,
                         };
-
 
                         setScannedItems(prev => [newItem, ...prev]);
                         setTotalQty(prev => prev + addedQty);
@@ -256,8 +493,9 @@ export default function PD({ navigation }: any) {
                         try {
                             const response = await fetch(`${BASE_URL}/api/InventoryConfirm`, {
                                 method: "POST",
-                                headers: { "Content-Type": "application/json" },
+                                headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, },
                                 body: JSON.stringify({
+                                    operateUserCode, operateUserName, operateWareHouseCode, operateRandomNumber, operateSign, operateVersion,
                                     factoryCode: gs_factoryCode,
                                     warehouseCode: gs_wareCode,
                                     inventoryNo: selectedOrder,
@@ -265,7 +503,24 @@ export default function PD({ navigation }: any) {
                                     inventoryModel: model,
                                 }),
                             });
+
+                            if (response.status === 401) {
+                                Alert.alert("Unauthorized", "Token expired or invalid.");
+                                return;
+                            }
+
+                            if (response.status === 403) {
+                                Alert.alert("Access Denied", "You do not have permission.");
+                                return;
+                            }
+
                             const result = await response.json();
+
+                            if (result.code === 500) {
+                                Alert.alert("Error", result.message);
+                                navigation.goBack();
+                                return;
+                            }
                             if (result.message === "success") {
                                 Alert.alert("Success", "Inventory confirmed successfully.");
                                 setShowConfirmBtn(false);
@@ -285,63 +540,55 @@ export default function PD({ navigation }: any) {
     };
 
     const renderItem = ({ item }: { item: ScannedItem }) => (
-        <View style={styles.row}>
-            <Text style={[styles.cell, { flex: 1.5 }]}>{item.barcode}</Text>
-            <View style={{ flex: 1.5 }}>
-                <Text style={styles.cellMain}>{item.model}</Text>
-                <Text style={styles.cellSub}>{item.color}</Text>
-            </View>
+        <View style={styles.tableRow}>
+            <Text style={[styles.cell, { flex: 1.2 }]}>{item.barcode}</Text>
+            <Text style={[styles.cell, { flex: 1 }]}>{item.model}</Text>
+            <Text style={[styles.cell, { flex: 0.8 }]}>{item.color}</Text>
             <Text style={[styles.cell, { flex: 0.5 }]}>{item.qty}</Text>
         </View>
     );
 
     return (
         <SafeAreaView style={styles.container}>
-            <StatusBar barStyle="light-content" backgroundColor="#1E1B4B" />
+            <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
             <View style={styles.header}>
-                <Text style={styles.headerTitle}>Inventory Management</Text>
-                <View style={styles.headerStats}>
-                    <View style={styles.statBox}>
-                        <Text style={styles.statLabel}>Total Scanned Qty</Text>
-                        <Text style={styles.statValue}>{totalQty}</Text>
-                    </View>
+                <View style={styles.headerLeft}>
+                    <TouchableOpacity onPress={() => navigation.goBack()} activeOpacity={0.7}>
+                        <Image
+                            source={require("../../assets/logo/left.png")}
+                            style={styles.returnLogo}
+                            resizeMode="contain"
+                        />
+                    </TouchableOpacity>
+                    <Text style={styles.headerTitle}>Inventory Management</Text>
+                </View>
+                <View style={styles.headerRight}>
+                    <Text style={styles.userNameText}>{gs_userName}</Text>
                 </View>
             </View>
 
-            <ScrollView
-                style={styles.content}
-                contentContainerStyle={{ flexGrow: 1, paddingBottom: verticalScale(20) }}
-                keyboardShouldPersistTaps="handled"
-            >
+            <View style={styles.statsCard}>
+                <View style={[styles.statBox, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}>
+                    <Text style={styles.statLabel}>Total</Text>
+                    <Text style={styles.statValue}>{totalQty}</Text>
+                </View>
+            </View>
+
+            <View style={styles.content}>
                 <View style={styles.formCard}>
                     <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Inventory Order</Text>
-                        <View style={styles.pickerContainer}>
-                            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                                <View style={styles.orderList}>
-                                    {orders.map((order) => (
-                                        <TouchableOpacity
-                                            key={order.inventoryNo}
-                                            style={[
-                                                styles.orderChip,
-                                                selectedOrder === order.inventoryNo && styles.orderChipSelected
-                                            ]}
-                                            onPress={() => {
-                                                setSelectedOrder(order.inventoryNo);
-                                                fetchOrderDetails(order.inventoryNo);
-                                            }}
-                                        >
-                                            <Text style={[
-                                                styles.orderChipText,
-                                                selectedOrder === order.inventoryNo && styles.orderChipTextSelected
-                                            ]}>
-                                                {order.inventoryNo}
-                                            </Text>
-                                        </TouchableOpacity>
-                                    ))}
-                                </View>
-                            </ScrollView>
-                        </View>
+                        <CustomInput
+                            ref={orderRef}
+                            placeholder={orders.length > 0 ? "Inventory NO" : "there is no items"}
+                            value={selectedOrder}
+                            onChangeText={(val: any) => {
+                                setSelectedOrder(val.inventoryNo);
+                                fetchOrderDetails(val.inventoryNo);
+                            }}
+                            isSelect
+                            options={orders}
+                            onBlur={ensureFocus}
+                        />
                     </View>
 
                     <View style={styles.infoGrid}>
@@ -365,26 +612,12 @@ export default function PD({ navigation }: any) {
                     </View>
 
                     <View style={styles.inputGroup}>
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: verticalScale(4) }}>
-                            <Text style={styles.label}>Scan Barcode (Pallet/Box/SN)</Text>
-                            <TouchableOpacity
-                                onPress={() => {
-                                    setShowKeyboard(!showKeyboard);
-                                    setTimeout(() => barcodeInputRef.current?.focus(), 100);
-                                }}
-                                style={styles.keyboardToggle}
-                            >
-                                <Text style={styles.keyboardToggleText}>
-                                    {showKeyboard ? "⌨️ Hide Keyboard" : "⌨️ Show Keyboard"}
-                                </Text>
-                            </TouchableOpacity>
-                        </View>
                         <TextInput
                             ref={barcodeInputRef}
                             style={styles.input}
                             value={barcode}
                             onChangeText={setBarcode}
-                            placeholder="Scan or enter barcode..."
+                            placeholder=" Barcode"
                             onSubmitEditing={(e) => handleScan(e.nativeEvent.text)}
                             autoCapitalize="characters"
                             autoCorrect={false}
@@ -395,127 +628,167 @@ export default function PD({ navigation }: any) {
                     </View>
                 </View>
 
-                <View style={styles.tableHeader}>
-                    <Text style={[styles.headerCell, { flex: 1.5 }]}>Barcode</Text>
-                    <Text style={[styles.headerCell, { flex: 1.5 }]}>Model/Color</Text>
-                    <Text style={[styles.headerCell, { flex: 0.5 }]}>Qty</Text>
-                </View>
+                <View style={styles.tableContainer}>
+                    <View style={styles.tableHeader}>
+                        <Text style={[styles.headerCell, { flex: 1.2 }]}>Barcode</Text>
+                        <Text style={[styles.headerCell, { flex: 1 }]}>Model</Text>
+                        <Text style={[styles.headerCell, { flex: 0.8 }]}>Color</Text>
+                        <Text style={[styles.headerCell, { flex: 0.5 }]}>Qty</Text>
+                    </View>
 
-                {loading && scannedItems.length === 0 ? (
-                    <ActivityIndicator size="large" color="#4F46E5" style={{ marginTop: verticalScale(40) }} />
-                ) : (
-                    <ScrollView
-                        style={{ height: verticalScale(120) }}
-                        nestedScrollEnabled={true}
-                    >
-                        {scannedItems.length > 0 ? (
-                            scannedItems.map((item) => (
-                                <View key={item.id}>
-                                    {renderItem({ item })}
+                    {loading && scannedItems.length === 0 ? (
+                        <ActivityIndicator size="large" color="#0052cc" style={{ marginTop: 40 }} />
+                    ) : (
+                        <FlatList
+                            data={scannedItems}
+                            renderItem={renderItem}
+                            keyExtractor={(item, index) => `${item.id}_${index}`}
+                            contentContainerStyle={{ paddingBottom: 10 }}
+                            ListEmptyComponent={
+                                <View style={{ padding: 20, alignItems: 'center' }}>
+                                    <Text style={{ color: '#94A3B8', fontStyle: 'italic' }}>No items scanned yet</Text>
                                 </View>
-                            ))
-                        ) : (
-                            <View style={{ padding: 20, alignItems: 'center' }}>
-                                <Text style={{ color: '#94A3B8', fontStyle: 'italic' }}>No items scanned yet</Text>
-                            </View>
-                        )}
-                    </ScrollView>
-                )}
-
-                <View style={styles.actions}>
-                    {showConfirmBtn && (
-                        <TouchableOpacity style={styles.confirmButton} onPress={handleConfirm}>
-                            <Text style={styles.buttonText}>All Finish</Text>
-                        </TouchableOpacity>
+                            }
+                        />
                     )}
-                    <TouchableOpacity style={styles.exitButton} onPress={() => navigation.goBack()}>
-                        <Text style={styles.buttonText}>Exit</Text>
-                    </TouchableOpacity>
                 </View>
-            </ScrollView>
+
+                <View style={styles.footer}>
+                    <View style={styles.buttonRow}>
+                        {showConfirmBtn && (
+                            <TouchableOpacity style={[styles.actionBtn, styles.btnPrimary]} onPress={handleConfirm}>
+                                <Text style={styles.btnTextPrimary}>All Finish</Text>
+                            </TouchableOpacity>
+                        )}
+                    </View>
+                </View>
+            </View>
         </SafeAreaView>
     );
 }
 
-const { width, height } = Dimensions.get("window");
-
-const scale = (size: number) => (width / 375) * size;
-const verticalScale = (size: number) => (height / 667) * size;
-
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: "#F8FAFC" },
     header: {
-        backgroundColor: "#1E1B4B",
-        padding: scale(16),
-        borderBottomLeftRadius: scale(24),
-        borderBottomRightRadius: scale(24),
+        backgroundColor: "#0052cc",
+        paddingHorizontal: width * 0.05,
+        height: scale(56),
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        elevation: 4,
     },
-    headerTitle: {
-        color: "#FFF",
-        fontSize: scale(18),
-        fontWeight: "900",
-        marginBottom: verticalScale(12),
+    headerLeft: { flexDirection: "row", alignItems: "center" },
+    returnLogo: { width: scale(24), height: scale(24), marginRight: 10, tintColor: "#FFFFFF" },
+    headerTitle: { color: "#FFFFFF", fontSize: isSmallDevice ? scale(14) : scale(16), fontWeight: "900" },
+    headerRight: { flexDirection: "row", alignItems: "center" },
+    userNameText: { color: "#FFFFFF", fontSize: scale(12), fontWeight: "700", marginRight: 1 },
+    statsCard: { padding: 8 },
+    statBox: {
+        backgroundColor: "#0052cc",
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 12,
+        elevation: 2,
+        borderWidth: 1,
+        borderColor: "#E2E8F0"
     },
-    headerStats: { flexDirection: "row" },
-    statBox: { flex: 1, backgroundColor: "rgba(255,255,255,0.1)", padding: scale(10), borderRadius: scale(12) },
-    statLabel: { color: "#A5B4FC", fontSize: scale(9), textTransform: "uppercase", fontWeight: "700" },
-    statValue: { color: "#FFF", fontSize: scale(16), fontWeight: "800", marginTop: verticalScale(2) },
-    content: { flex: 1, padding: scale(12) },
+    statLabel: { color: "#FFFFFF", fontSize: 12, fontWeight: "700", textTransform: "uppercase" },
+    statValue: { color: "#FFFFFF", fontSize: 12, fontWeight: "800" },
+    content: { flex: 1 },
     formCard: {
         backgroundColor: "#FFF",
-        padding: scale(12),
-        borderRadius: scale(16),
-        marginBottom: verticalScale(12),
+        padding: 8,
+        borderRadius: 12,
+        marginHorizontal: 8,
+        marginBottom: 2,
         elevation: 2,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-    },
-    inputGroup: { marginBottom: verticalScale(10) },
-    label: { fontSize: scale(10), fontWeight: "700", color: "#64748B", marginBottom: verticalScale(4), textTransform: "uppercase" },
-    pickerContainer: { height: verticalScale(40), justifyContent: "center" },
-    orderList: { flexDirection: "row", gap: scale(6) },
-    orderChip: { paddingHorizontal: scale(12), paddingVertical: verticalScale(6), borderRadius: scale(20), backgroundColor: "#F1F5F9", borderWidth: 1, borderColor: "#E2E8F0" },
-    orderChipSelected: { backgroundColor: "#4F46E5", borderColor: "#4F46E5" },
-    orderChipText: { fontSize: scale(11), fontWeight: "600", color: "#475569" },
-    orderChipTextSelected: { color: "#FFF" },
-    infoGrid: { flexDirection: "row", gap: scale(6), marginBottom: verticalScale(8) },
-    infoBox: { flex: 1, backgroundColor: "#F8FAFC", padding: scale(8), borderRadius: scale(10), borderWidth: 1, borderColor: "#F1F5F9" },
-    infoLabel: { fontSize: scale(8), color: "#94A3B8", fontWeight: "700", textTransform: "uppercase" },
-    infoValue: { fontSize: scale(10), color: "#1E293B", fontWeight: "700", marginTop: verticalScale(2) },
-    input: { backgroundColor: "#F1F5F9", height: verticalScale(40), borderRadius: scale(10), paddingHorizontal: scale(12), fontSize: scale(13), color: "#1E293B", fontWeight: "600" },
-    tableHeader: { flexDirection: "row", backgroundColor: "#F1F5F9", padding: scale(8), borderRadius: scale(10), marginBottom: verticalScale(6) },
-    headerCell: { fontSize: scale(9), fontWeight: "900", color: "#64748B", textAlign: "center", textTransform: "uppercase" },
-    row: {
-        flexDirection: "row",
-        height: verticalScale(40),
-        borderBottomWidth: 1,
-        borderBottomColor: "#F1F5F9",
-        backgroundColor: "#FFF",
-        borderRadius: scale(8),
-        marginBottom: verticalScale(2),
-        alignItems: "center"
-    },
-    cell: { fontSize: scale(10), color: "#334155", textAlign: "center", fontWeight: "600" },
-    cellMain: { fontSize: scale(10), color: "#1E293B", fontWeight: "700", textAlign: "center" },
-    cellSub: { fontSize: scale(9), color: "#64748B", textAlign: "center" },
-    actions: { marginTop: verticalScale(12), gap: verticalScale(8) },
-    confirmButton: { backgroundColor: "#10B981", padding: verticalScale(12), borderRadius: scale(10), alignItems: "center" },
-    exitButton: { backgroundColor: "#EF4444", padding: verticalScale(12), borderRadius: scale(10), alignItems: "center" },
-    buttonText: { color: "#FFF", fontWeight: "900", fontSize: scale(13) },
-    keyboardToggle: {
-        backgroundColor: '#F1F5F9',
-        paddingHorizontal: scale(8),
-        paddingVertical: verticalScale(4),
-        borderRadius: scale(6),
         borderWidth: 1,
-        borderColor: '#CBD5E1',
+        borderColor: "#E2E8F0"
     },
+    inputGroup: { marginBottom: 4 },
+    label: { fontSize: 10, fontWeight: "700", color: "#64748B", marginBottom: 2, textTransform: "uppercase" },
+    infoGrid: { flexDirection: "row", gap: 2, marginBottom: 2 },
+    infoBox: { flex: 1, backgroundColor: "#F8FAFC", padding: 4, borderRadius: 8, borderWidth: 1, borderColor: "#F1F5F9" },
+    infoLabel: { fontSize: 10, color: "#94A3B8", fontWeight: "700", textTransform: "uppercase" },
+    infoValue: { fontSize: 11, color: "#1E293B", fontWeight: "700", marginTop: 0 },
+    input: { backgroundColor: "#F1F5F9", height: 32, borderRadius: 8, paddingHorizontal: 10, fontSize: 12, color: "#1E293B", fontWeight: "600", borderWidth: 1, borderColor: "#CBD5E1", paddingVertical: 0, textAlignVertical: 'center' },
+    tableContainer: { flex: 1, backgroundColor: "#FFF", marginHorizontal: 8, borderRadius: 12, overflow: "hidden", elevation: 2, borderWidth: 1, borderColor: "#E2E8F0", marginBottom: 2 },
+    tableHeader: { flexDirection: "row", backgroundColor: "#0052cc", paddingVertical: 8 },
+    headerCell: { fontSize: 10, fontWeight: "800", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
+    tableRow: { flexDirection: "row", paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: "#F1F5F9", alignItems: "center" },
+    cell: { fontSize: 11, color: "#334155", textAlign: "center", fontWeight: "600" },
+    cellMain: { fontSize: 11, color: "#1E293B", fontWeight: "700", textAlign: "center" },
+    cellSub: { fontSize: 10, color: "#64748B", textAlign: "center" },
+    footer: { paddingHorizontal: 16, paddingVertical: 8, borderTopWidth: 1, borderTopColor: '#e2e8f0' },
+    buttonRow: { flexDirection: 'row', gap: 12 },
+    actionBtn: { flex: 1, height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+    btnPrimary: { backgroundColor: '#10B981' },
+    btnSecondary: { backgroundColor: '#f1f5f9', borderWidth: 1, borderColor: '#e2e8f0' },
+    btnTextPrimary: { color: '#fff', fontSize: 15, fontWeight: '800' },
+    btnTextSecondary: { color: '#475569', fontSize: 15, fontWeight: '700' },
     keyboardToggleText: {
-        fontSize: scale(9),
+        fontSize: 9,
         fontWeight: '700',
-        color: '#4F46E5',
+        color: '#0052cc',
+    },
+    inputWrapper: {
+        marginBottom: 4,
+    },
+    inputContainer: {
+        height: 32,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: "#CBD5E1",
+        flexDirection: "row",
+        alignItems: "center",
+        paddingHorizontal: 10,
+        backgroundColor: "#F1F5F9",
+    },
+    inputFocused: {
+        borderColor: "#0052cc",
+    },
+    inputIcon: {
+        width: 16,
+        height: 16,
+        marginRight: 8,
+        tintColor: "#64748b",
+    },
+    placeholderText: {
+        color: "#94a3b8",
+        fontSize: 12,
+    },
+    chevronIcon: {
+        fontSize: 10,
+        color: "#94a3b8",
+    },
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: "rgba(0,0,0,0.5)",
+        justifyContent: "center",
+        alignItems: "center",
+    },
+    modalContent: {
+        backgroundColor: "#fff",
+        width: width * 0.9,
+        maxHeight: height * 0.6,
+        borderRadius: 16,
+        padding: width * 0.05,
+    },
+    modalTitle: {
+        fontSize: 14,
+        fontWeight: "800",
+        marginBottom: 12,
+        textAlign: "center",
+    },
+    optionItem: {
+        paddingVertical: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: "#f1f5f9",
+    },
+    optionText: {
+        fontSize: 13,
+        textAlign: "center",
     },
 });
 

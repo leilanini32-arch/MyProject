@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
     View,
@@ -6,12 +7,16 @@ import {
     ScrollView,
     TouchableOpacity,
     StyleSheet,
-    SafeAreaView,
     StatusBar,
     Alert,
     ActivityIndicator,
+    Image,
+    Dimensions,
+    TextInput,
+    DeviceEventEmitter
 } from "react-native";
 import { useGlobal } from "../../GlobalContext.tsx";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 type PalletDetail = {
     fxh: string;
@@ -28,36 +33,66 @@ type PalletDetail = {
 export default function DeliverySNConfirmBox({ navigation, route }: any) {
     const { gsURL, setgs_gsURL } = useGlobal();
     const BASE_URL = gsURL;
-    const { fromWareHouseCode, barCode, scanType, onConfirm } = route.params || {};
+    const { fromWareHouseCode, barCode, scanType, showConfirm } = route.params || {};
     const global = useGlobal();
+    const [token, setToken] = useState("");
 
     const [loading, setLoading] = useState(false);
     const [details, setDetails] = useState<PalletDetail[]>([]);
     const [palletCode, setPalletCode] = useState("");
+    const [boxCode, setBoxCode] = useState("");
     const [totalQty, setTotalQty] = useState(0);
     const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
 
     useEffect(() => {
-        if (fromWareHouseCode && barCode && scanType) {
-            fetchPalletDetails();
+        const loadToken = async () => {
+            const t = await AsyncStorage.getItem("userToken");
+            console.log("TOKEN IN Allocateout", t);
+            if (t) setToken(t);
+        };
+
+        loadToken();
+    }, []);
+
+    useEffect(() => {
+        if (token) {
+            if (fromWareHouseCode && barCode && scanType) {
+                fetchPalletDetails();
+            }
         }
-    }, [fromWareHouseCode, barCode, scanType]);
+    }, [fromWareHouseCode, barCode, scanType, token]);
 
     const fetchPalletDetails = async () => {
         setLoading(true);
         try {
             const response = await fetch(`${BASE_URL}/api/DeliveryPalletSNConfirmBox`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, },
                 body: JSON.stringify({
-                    FactoryCode: global.gs_factoryCode,
-                    FromWareHouseCode: fromWareHouseCode,
-                    BarCode: barCode,
-                    ScanType: scanType
+                    factoryCode: global.gs_factoryCode,
+                    fromWareHouseCode: fromWareHouseCode,
+                    barCode: barCode,
+                    scanType: scanType
                 })
             });
 
+            if (response.status === 401) {
+                Alert.alert("Unauthorized", "Token expired or invalid.");
+                return;
+            }
+
+            if (response.status === 403) {
+                Alert.alert("Access Denied", "You do not have permission.");
+                return;
+            }
+
             const result = await response.json();
+
+            if (result.code === 500) {
+                Alert.alert("Error", result.message);
+                navigation.goBack();
+                return;
+            }
             if (result.message == "success" && result.data && result.data.length > 0) {
                 const list: PalletDetail[] = result.data.map((item: any) => ({
                     fxh: item.fxh,
@@ -71,6 +106,7 @@ export default function DeliverySNConfirmBox({ navigation, route }: any) {
 
                 setDetails(list);
                 setPalletCode(list[0].palletCode);
+                setBoxCode(list[0].boxCode);
 
                 const total = list.reduce((sum, item) => sum + parseInt(item.qty || "0"), 0);
                 setTotalQty(total);
@@ -90,24 +126,37 @@ export default function DeliverySNConfirmBox({ navigation, route }: any) {
         if (details.length >= 1) {
             Alert.alert(
                 "Confirmation",
-                "Are you sure you want to confirm?",
+                "Are you sure you want to confirm this operation?",
                 [
                     {
                         text: "Cancel",
                         style: "cancel",
+                        onPress: () => {
+                            DeviceEventEmitter.emit(
+                                'ON_DELIVERY_CONFIRM_CANCEL'
+                            );
+                            navigation.goBack();
+                        }
                     },
                     {
                         text: "Yes",
                         onPress: () => {
-                            if (onConfirm) onConfirm();
+                            DeviceEventEmitter.emit(
+                                'ON_DELIVERY_CONFIRM_OK',
+                                {
+                                    barCode,
+                                    scanType
+                                }
+                            );
                             navigation.goBack();
-                        },
-                    },
-                ],
-                { cancelable: true }
+                        }
+                    }
+                ]
             );
         } else {
-            Alert.alert("Warning", "No data to confirm.");
+            DeviceEventEmitter.emit(
+                'ON_DELIVERY_CONFIRM_CANCEL'
+            );
             navigation.goBack();
         }
     };
@@ -141,132 +190,187 @@ export default function DeliverySNConfirmBox({ navigation, route }: any) {
     const tableHeaders = ["FXH", "Boxcode", "Qty", "Model", "Color", "Order"];
 
     return (
-        <SafeAreaView style={styles.safeArea}>
-            <StatusBar barStyle="light-content" backgroundColor="#1E1B4B" />
+        <SafeAreaView style={styles.container}>
+            <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
 
             {/* Header */}
             <View style={styles.header}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Text style={styles.headerTitle}>Confirm Scan Content</Text>
-                    {loading && <ActivityIndicator color="#FFF" />}
+                <View style={styles.headerLeft}>
+                    <TouchableOpacity onPress={handleExit} activeOpacity={0.7}>
+                        <Image
+                            source={require("../../assets/logo/left.png")}
+                            style={styles.returnLogo}
+                            resizeMode="contain"
+                        />
+                    </TouchableOpacity>
+                    <Text style={styles.headerTitle}>Delivery Confirm </Text>
                 </View>
-                <Text style={styles.headerSubtitle}>{getQtyLabel()}</Text>
+
+                <View style={styles.headerRight}>
+                    <Text style={styles.userNameText}>{global.gs_userName}</Text>
+                </View>
             </View>
 
-            <View style={styles.container}>
-                {/* List Card */}
-                <View style={[styles.card, { flex: 1 }]}>
-                    <View style={styles.cardHeader}>
-                        <Text style={styles.cardTitle}>{scanType?.toUpperCase()} Details</Text>
+            <View style={styles.statsCard}>
+                {scanType === "pallet" && (
+                    <View style={styles.statBox}>
+                        <Text style={styles.statLabel}>Pallet</Text>
+                        <TextInput
+                            style={styles.statInput}
+                            value={palletCode}
+                            onChangeText={setPalletCode}
+                            placeholder="-"
+                        />
                     </View>
-
-                    <ScrollView horizontal showsHorizontalScrollIndicator={true}>
-                        <View>
-                            <View style={styles.tableHeaderRow}>
-                                {tableHeaders.map((h) => (
-                                    <Text key={h} style={styles.headerCell}>
-                                        {h}
-                                    </Text>
-                                ))}
-                            </View>
-
-                            <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator>
-                                {details.length > 0 ? (
-                                    details.map((item, index) => (
-                                        <TouchableOpacity
-                                            key={index}
-                                            style={[
-                                                styles.tableDataRow,
-                                                selectedIndex === index && styles.selectedRow
-                                            ]}
-                                            onPress={() => setSelectedIndex(index)}
-                                        >
-                                            <Text style={styles.cell}>{item.fxh}</Text>
-                                            <Text style={styles.cell}>{item.boxCode}</Text>
-                                            <Text style={styles.cell}>{item.qty}</Text>
-                                            <Text style={styles.cell}>{item.model}</Text>
-                                            <Text style={styles.cell}>{item.color}</Text>
-                                            <Text style={styles.cell}>{item.orderCode}</Text>
-                                        </TouchableOpacity>
-                                    ))
-                                ) : (
-                                    <View style={styles.emptyContainer}>
-                                        <Text style={styles.emptyText}>No data available</Text>
-                                    </View>
-                                )}
-                            </ScrollView>
-                        </View>
-                    </ScrollView>
+                )}
+                {(scanType === "sn" || scanType === "box") && (
+                    <View style={styles.statBox}>
+                        <Text style={styles.statLabel}>Box</Text>
+                        <TextInput
+                            style={styles.statInput}
+                            value={boxCode}
+                            onChangeText={setBoxCode}
+                            placeholder="-"
+                        />
+                    </View>
+                )}
+                <View style={styles.statBox}>
+                    <Text style={styles.statLabel}>Total Qty</Text>
+                    <Text style={styles.statValue}>{totalQty || "0"}</Text>
                 </View>
+            </View>
 
-                {/* Actions */}
-                <View style={styles.actionContainer}>
-                    <TouchableOpacity
-                        style={[styles.btn, styles.btnPrimary]}
-                        onPress={handleConfirm}
-                    >
-                        <Text style={styles.btnText}>Confirm</Text>
-                    </TouchableOpacity>
+            {/* List Card */}
+            <View style={styles.tableCard}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={true}>
+                    <View>
+                        <View style={styles.tableHeader}>
+                            {tableHeaders.map((h) => (
+                                <Text key={h} style={[styles.headerCell, { width: 90 }]}>
+                                    {h}
+                                </Text>
+                            ))}
+                        </View>
+
+                        <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator>
+                            {details.length > 0 ? (
+                                details.map((item, index) => (
+                                    <TouchableOpacity
+                                        key={index}
+                                        style={[
+                                            styles.row,
+                                            selectedIndex === index && styles.selectedRow
+                                        ]}
+                                        onPress={() => setSelectedIndex(index)}
+                                    >
+                                        <Text style={[styles.cell, { width: 90 }]}>{item.fxh}</Text>
+                                        <Text style={[styles.cell, { width: 90 }]}>{item.boxCode}</Text>
+                                        <Text style={[styles.cell, { width: 90 }]}>{item.qty}</Text>
+                                        <Text style={[styles.cell, { width: 90 }]}>{item.model}</Text>
+                                        <Text style={[styles.cell, { width: 90 }]}>{item.color}</Text>
+                                        <Text style={[styles.cell, { width: 120 }]}>{item.orderCode}</Text>
+                                    </TouchableOpacity>
+                                ))
+                            ) : (
+                                <Text style={[styles.emptyText, { width: 540 }]}>No data available</Text>
+                            )}
+                        </ScrollView>
+                    </View>
+                </ScrollView>
+            </View>
+
+
+            <View style={styles.footer}>
+                <View style={styles.buttonRow}>
 
                     <TouchableOpacity
-                        style={[styles.btn, styles.btnInfo]}
+                        style={[styles.actionBtn, styles.btnSecondary]}
                         onPress={viewItemDetails}
                     >
-                        <Text style={styles.btnText}>Details</Text>
+                        <Text style={styles.btnTextSecondary}>Details</Text>
                     </TouchableOpacity>
 
                     <TouchableOpacity
-                        style={[styles.btn, styles.btnSecondary]}
-                        onPress={handleExit}
+                        style={[styles.actionBtn, styles.btnPrimary]}
+                        onPress={handleConfirm}
                     >
-                        <Text style={styles.btnTextSecondary}>Exit</Text>
+                        <Text style={styles.btnTextPrimary}>Confirm</Text>
                     </TouchableOpacity>
                 </View>
             </View>
+
         </SafeAreaView>
     );
 }
 
+const { width, height } = Dimensions.get("window");
+const isSmallDevice = width < 360;
+const scale = (size: number) => (width / 375) * size;
+
 const styles = StyleSheet.create({
-    safeArea: { flex: 1, backgroundColor: "#F8FAFC" },
-    container: { flex: 1, padding: 16, paddingBottom: 40 },
+    container: { flex: 1, backgroundColor: "#F8FAFC" },
     header: {
-        backgroundColor: "#1E1B4B",
-        paddingTop: 20,
-        paddingBottom: 20,
-        paddingHorizontal: 20,
-        borderBottomLeftRadius: 20,
-        borderBottomRightRadius: 20,
+        backgroundColor: "#0052cc",
+        paddingHorizontal: width * 0.05,
+        height: scale(56),
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        elevation: 4,
     },
-    headerTitle: { color: "#FFFFFF", fontSize: 20, fontWeight: "800" },
-    headerSubtitle: { color: "#A5B4FC", fontSize: 14, fontWeight: "600", marginTop: 4 },
-    card: {
-        backgroundColor: "#FFFFFF",
-        borderRadius: 16,
-        padding: 20,
-        marginBottom: 16,
-        borderWidth: 1,
-        borderColor: "#E2E8F0",
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 5,
+    headerLeft: {
+        flexDirection: "row",
+        alignItems: "center",
+    },
+    returnLogo: {
+        width: scale(24),
+        height: scale(24),
+        marginRight: 10,
+        tintColor: "#FFFFFF",
+    },
+    headerTitle: {
+        color: "#FFFFFF",
+        fontSize: isSmallDevice ? scale(14) : scale(16),
+        fontWeight: "900",
+    },
+    headerRight: {
+        flexDirection: "row",
+        alignItems: "center",
+    },
+    userNameText: {
+        color: "#FFFFFF",
+        fontSize: scale(12),
+        fontWeight: "700",
+        marginRight: 1,
+    },
+    statsCard: { padding: 12, gap: 10 },
+    statBox: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        backgroundColor: "#0052cc",
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 12,
         elevation: 2,
+        borderWidth: 1,
+        borderColor: "#E2E8F0"
     },
-    cardHeader: { borderLeftWidth: 4, borderLeftColor: "#4F46E5", paddingLeft: 10, marginBottom: 20 },
-    cardTitle: { fontSize: 14, fontWeight: "800", color: "#475569", textTransform: "uppercase" },
-    tableHeaderRow: { flexDirection: "row", backgroundColor: "#F1F5F9", borderRadius: 8, paddingVertical: 10 },
-    headerCell: { width: 90, textAlign: "center", fontSize: 10, fontWeight: "800", color: "#64748B", textTransform: "uppercase" },
-    tableDataRow: { flexDirection: "row", borderBottomWidth: 1, borderBottomColor: "#F1F5F9" },
+    statLabel: { color: "#FFFFFF", fontSize: 11, fontWeight: "700", textTransform: "uppercase" },
+    statValue: { color: "#FFFFFF", fontSize: 12, fontWeight: "800" },
+    statInput: { color: "#FFFFFF", fontSize: 12, fontWeight: "800", padding: 0, height: 20, textAlign: 'right', flex: 1 },
+    tableCard: { flex: 1, backgroundColor: "#FFF", marginHorizontal: 16, borderRadius: 16, overflow: "hidden", elevation: 2, borderWidth: 1, borderColor: "#E2E8F0", marginBottom: -4 },
+    tableHeader: { flexDirection: "row", backgroundColor: "#0052cc", paddingVertical: 10 },
+    headerCell: { fontSize: 10, fontWeight: "800", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
+    row: { flexDirection: "row", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#F1F5F9", alignItems: "center" },
+    cell: { fontSize: 11, color: "#334155", textAlign: "center", fontWeight: "600" },
+    emptyText: { textAlign: "center", color: "#94A3B8", marginTop: 40, fontStyle: "italic" },
+    footer: { padding: 12 },
+    buttonRow: { flexDirection: 'row', gap: 12 },
+    actionBtn: { flex: 1, height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+    btnPrimary: { backgroundColor: '#2563eb' },
+    btnSecondary: { backgroundColor: '#f1f5f9', borderWidth: 1, borderColor: '#e2e8f0' },
+    btnTextPrimary: { color: '#fff', fontSize: 15, fontWeight: '800' },
+    btnTextSecondary: { color: '#475569', fontSize: 15, fontWeight: '700' },
     selectedRow: { backgroundColor: "#E0E7FF" },
-    cell: { width: 90, textAlign: "center", paddingVertical: 15, fontSize: 11, color: "#334155", fontWeight: "600" },
-    emptyContainer: { flex: 1, justifyContent: "center", alignItems: "center", paddingTop: 40, width: 540 },
-    emptyText: { color: "#94A3B8", fontStyle: "italic", fontSize: 13 },
-    actionContainer: { flexDirection: "row", gap: 8, marginTop: 10 },
-    btn: { flex: 1, height: 55, borderRadius: 14, justifyContent: "center", alignItems: "center", elevation: 3 },
-    btnPrimary: { backgroundColor: "#2563EB" },
-    btnInfo: { backgroundColor: "#4F46E5" },
-    btnSecondary: { backgroundColor: "#FEE2E2", borderWidth: 1, borderColor: "#FECACA" },
-    btnText: { color: "#FFFFFF", fontWeight: "800", fontSize: 15 },
-    btnTextSecondary: { color: "#EF4444", fontWeight: "800", fontSize: 15 },
 });

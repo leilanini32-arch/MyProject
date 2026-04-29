@@ -1,16 +1,21 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { SafeAreaView } from 'react-native-safe-area-context';
 import {
     View,
     Text,
     StyleSheet,
-    SafeAreaView,
+    TextInput,
     TouchableOpacity,
     FlatList,
+    ScrollView,
     ActivityIndicator,
     StatusBar,
     Alert,
+    Image,
+    Dimensions,
 } from "react-native";
 import { useGlobal } from "../../GlobalContext.tsx";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 interface PalletSNBoxDetail {
     id: string;
@@ -25,28 +30,58 @@ interface PalletSNBoxDetail {
 export default function AllocateInSNBox({ navigation, route }: any) {
     const { allocateCode } = route.params || {};
     const global = useGlobal();
-    const { gsURL, gs_factoryCode, gs_wareCode } = global;
+    const { gsURL, gs_factoryCode, gs_wareCode, gs_userName,operateUserCode, operateUserName, operateWareHouseCode, operateRandomNumber, operateSign, operateVersion, } = global;
     const BASE_URL = gsURL;
+    const [token, setToken] = useState("");
 
     const [loading, setLoading] = useState(true);
     const [details, setDetails] = useState<PalletSNBoxDetail[]>([]);
     const [totalQty, setTotalQty] = useState(0);
+    const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+
+    useEffect(() => {
+        const loadToken = async () => {
+            const t = await AsyncStorage.getItem("userToken");
+            console.log("TOKEN IN AllocateIN", t);
+            if (t) setToken(t);
+        };
+
+        loadToken();
+    }, []);
+
 
     const fetchDetails = useCallback(async () => {
         setLoading(true);
         try {
             const response = await fetch(`${BASE_URL}/api/AllocateInPalletSNBox`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, },
                 body: JSON.stringify({
+                    operateUserCode, operateUserName, operateWareHouseCode, operateRandomNumber, operateSign, operateVersion,
                     factoryCode: gs_factoryCode,
                     wareHouseCode: gs_wareCode,
                     allocateCode: allocateCode,
                 }),
             });
+
+            if (response.status === 401) {
+                Alert.alert("Unauthorized", "Token expired or invalid.");
+                return;
+            }
+
+            if (response.status === 403) {
+                Alert.alert("Access Denied", "You do not have permission.");
+                return;
+            }
             const result = await response.json();
+
+            if (result.code === 500) {
+                Alert.alert("Error", result.message);
+                navigation.goBack();
+                return;
+            }
             console.log("resultat de snbox", result);
-            console.log("resultat de allocateCode",allocateCode);
+            console.log("resultat de allocateCode", allocateCode);
             if (result.message === 'success' && result.data) {
                 let sum = 0;
                 const mapped = result.data.map((item: any, index: number) => {
@@ -73,64 +108,109 @@ export default function AllocateInSNBox({ navigation, route }: any) {
         } finally {
             setLoading(false);
         }
-    }, [allocateCode, gs_factoryCode, gs_wareCode, BASE_URL, navigation]);
+    }, [allocateCode, gs_factoryCode, gs_wareCode, BASE_URL, token, navigation]);
+
 
     useEffect(() => {
-        fetchDetails();
-    }, [fetchDetails]);
+        if (token) {
+            fetchDetails();
+        }
+    }, [token, fetchDetails]);
 
-    const renderItem = ({ item }: { item: PalletSNBoxDetail }) => (
-        <TouchableOpacity
-            style={styles.row}
-            onPress={() => navigation.navigate("AllocateInSN", {
+    const renderItem = ({ item, index }: { item: PalletSNBoxDetail; index: number }) => {
+        const isSelected = selectedIndex === index;
+        return (
+            <TouchableOpacity
+                style={[styles.row, isSelected && styles.selectedRow]}
+                onPress={() => setSelectedIndex(index)}
+            >
+                <Text style={[styles.cell, { width: 60 }]}>{item.fxh}</Text>
+                <Text style={[styles.cell, { width: 150 }]}>{item.palletCode}</Text>
+                <Text style={[styles.cell, { width: 150 }]}>{item.boxCode}</Text>
+                <Text style={[styles.cell, { width: 60 }]}>{item.qty}</Text>
+                <Text style={[styles.cell, { width: 120 }]}>{item.model}</Text>
+                <Text style={[styles.cell, { width: 100 }]}>{item.color}</Text>
+            </TouchableOpacity>
+        );
+    };
+
+    const handleBarcodeDetails = () => {
+        if (selectedIndex !== null && details[selectedIndex]) {
+            const item = details[selectedIndex];
+            navigation.navigate("AllocateInSN", {
                 allocateCode,
                 palletCode: item.palletCode,
                 boxCode: item.boxCode
-            })}
-        >
-            <Text style={[styles.cell, { flex: 0.5 }]}>{item.fxh}</Text>
-            <Text style={[styles.cell, { flex: 1.5 }]}>{item.palletCode}</Text>
-            <Text style={[styles.cell, { flex: 1.5 }]}>{item.boxCode}</Text>
-            <Text style={[styles.cell, { flex: 0.5 }]}>{item.qty}</Text>
-            <Text style={[styles.cell, { flex: 1.2 }]}>{item.model}</Text>
-            <Text style={[styles.cell, { flex: 1 }]}>{item.color}</Text>
-        </TouchableOpacity>
-    );
+            });
+        } else {
+            Alert.alert("Notice", "Please select a row first");
+        }
+    };
+
+    const handleReturn = () => {
+        navigation.goBack();
+    };
 
     return (
         <SafeAreaView style={styles.container}>
-            <StatusBar barStyle="light-content" backgroundColor="#1E1B4B" />
+            <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
+
             <View style={styles.header}>
-                <Text style={styles.headerTitle}>Allocation SN Details (Box)</Text>
-                <Text style={styles.headerSubtitle}>
-                    Allocate Code: {allocateCode} | Total Qty: {totalQty}
-                </Text>
+                <View style={styles.headerLeft}>
+                    <TouchableOpacity onPress={handleReturn} activeOpacity={0.7}>
+                        <Image
+                            source={require("../../assets/logo/left.png")}
+                            style={styles.returnLogo}
+                            resizeMode="contain"
+                        />
+                    </TouchableOpacity>
+                    <Text style={styles.headerTitle}>AllocateIn Box Details</Text>
+                </View>
+
+                <View style={styles.headerRight}>
+                    <Text style={styles.userNameText}>{gs_userName}</Text>
+                </View>
             </View>
 
             <View style={styles.content}>
-                <View style={styles.tableHeader}>
-                    <Text style={[styles.headerCell, { flex: 0.5 }]}>FXH</Text>
-                    <Text style={[styles.headerCell, { flex: 1.5 }]}>Pallet</Text>
-                    <Text style={[styles.headerCell, { flex: 1.5 }]}>Box</Text>
-                    <Text style={[styles.headerCell, { flex: 0.5 }]}>Qty</Text>
-                    <Text style={[styles.headerCell, { flex: 1.2 }]}>Model</Text>
-                    <Text style={[styles.headerCell, { flex: 1 }]}>Color</Text>
+                <View style={styles.statsCard}>
+                    <View style={styles.statBox}>
+                        <Text style={styles.statLabel}>Pallet</Text>
+                        <Text style={styles.statValue}>{details.length > 0 ? details[0].palletCode : "-"}</Text>
+                    </View>
+                    <View style={styles.statBox}>
+                        <Text style={styles.statLabel}>Total Qty</Text>
+                        <Text style={styles.statValue}>{totalQty}</Text>
+                    </View>
                 </View>
 
-                {loading ? (
-                    <ActivityIndicator size="large" color="#4F46E5" style={{ marginTop: 40 }} />
-                ) : (
-                    <FlatList
-                        data={details}
-                        renderItem={renderItem}
-                        keyExtractor={(item) => item.id}
-                        contentContainerStyle={{ paddingBottom: 20 }}
-                    />
-                )}
+                <ScrollView horizontal showsHorizontalScrollIndicator={true}>
+                    <View>
+                        <View style={styles.tableHeader}>
+                            <Text style={[styles.headerCell, { width: 60 }]}>FXH</Text>
+                            <Text style={[styles.headerCell, { width: 150 }]}>Pallet</Text>
+                            <Text style={[styles.headerCell, { width: 150 }]}>Box</Text>
+                            <Text style={[styles.headerCell, { width: 60 }]}>Qty</Text>
+                            <Text style={[styles.headerCell, { width: 120 }]}>Model</Text>
+                            <Text style={[styles.headerCell, { width: 100 }]}>Color</Text>
+                        </View>
 
-                <View style={styles.actions}>
-                    <TouchableOpacity style={styles.cancelButton} onPress={() => navigation.goBack()}>
-                        <Text style={styles.cancelButtonText}>Close</Text>
+                        {loading ? (
+                            <ActivityIndicator size="large" color="#4F46E5" style={{ marginTop: 40 }} />
+                        ) : (
+                            <FlatList
+                                data={details}
+                                renderItem={renderItem}
+                                keyExtractor={(item) => item.id}
+                                contentContainerStyle={{ paddingBottom: 20 }}
+                            />
+                        )}
+                    </View>
+                </ScrollView>
+
+                <View style={styles.footer}>
+                    <TouchableOpacity style={styles.detailButton} onPress={handleBarcodeDetails}>
+                        <Text style={styles.detailButtonText}>Barcode Details</Text>
                     </TouchableOpacity>
                 </View>
             </View>
@@ -138,17 +218,70 @@ export default function AllocateInSNBox({ navigation, route }: any) {
     );
 }
 
+const { width, height } = Dimensions.get("window");
+const isSmallDevice = width < 360;
+const scale = (size: number) => (width / 375) * size;
+
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: "#F8FAFC" },
-    header: { backgroundColor: "#1E1B4B", padding: 20, borderBottomLeftRadius: 24, borderBottomRightRadius: 24 },
-    headerTitle: { color: "#FFF", fontSize: 18, fontWeight: "900" },
-    headerSubtitle: { color: "#A5B4FC", fontSize: 12, marginTop: 4 },
+    header: {
+        backgroundColor: "#0052cc",
+        paddingHorizontal: width * 0.05,
+        height: scale(56),
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        elevation: 4,
+    },
+    headerLeft: {
+        flexDirection: "row",
+        alignItems: "center",
+    },
+    returnLogo: {
+        width: scale(24),
+        height: scale(24),
+        marginRight: 10,
+        tintColor: "#FFFFFF",
+    },
+    headerTitle: {
+        color: "#FFFFFF",
+        fontSize: isSmallDevice ? scale(14) : scale(16),
+        fontWeight: "900",
+    },
+    headerRight: {
+        flexDirection: "row",
+        alignItems: "center",
+    },
+    userNameText: {
+        color: "#FFFFFF",
+        fontSize: scale(12),
+        fontWeight: "700",
+        marginRight: 1,
+    },
     content: { flex: 1, padding: 16 },
-    tableHeader: { flexDirection: "row", backgroundColor: "#F1F5F9", padding: 12, borderRadius: 10, marginBottom: 8 },
-    headerCell: { fontSize: 10, fontWeight: "900", color: "#64748B", textAlign: "center", textTransform: "uppercase" },
+    statsCard: { paddingBottom: 16, gap: 10 },
+    statBox: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        backgroundColor: "#0052cc",
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        borderRadius: 12,
+        elevation: 2,
+        borderWidth: 1,
+        borderColor: "#E2E8F0"
+    },
+    statLabel: { color: "#FFFFFF", fontSize: 11, fontWeight: "700", textTransform: "uppercase" },
+    statValue: { color: "#FFFFFF", fontSize: 12, fontWeight: "800" },
+    tableHeader: { flexDirection: "row", backgroundColor: "#0052cc", paddingVertical: 10, borderRadius: 10, marginBottom: 8 },
+    headerCell: { fontSize: 10, fontWeight: "900", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
     row: { flexDirection: "row", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#F1F5F9", backgroundColor: "#FFF", borderRadius: 8, marginBottom: 4 },
     cell: { fontSize: 11, color: "#334155", textAlign: "center", fontWeight: "600" },
-    actions: { flexDirection: "row", gap: 12, marginTop: 16 },
-    cancelButton: { flex: 1, backgroundColor: "#EF4444", padding: 16, borderRadius: 12, alignItems: "center", elevation: 2 },
+    selectedRow: { backgroundColor: "#E0E7FF" },
+    footer: { flexDirection: "row", gap: 12, marginTop: 16 },
+    detailButton: { flex: 1, backgroundColor: "#4F46E5", padding: 8, borderRadius: 12, alignItems: "center" },
+    detailButtonText: { color: "#FFF", fontWeight: "900", fontSize: 15 },
+    cancelButton: { flex: 1, backgroundColor: "#EF4444", padding: 8, borderRadius: 12, alignItems: "center", elevation: 2 },
     cancelButtonText: { color: "#FFF", fontWeight: "900", fontSize: 15 },
 });

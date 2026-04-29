@@ -3,13 +3,15 @@ import { GlobalProvider } from "./GlobalContext";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
-import Login from "./src/screens/Login";
-import Menu from "./src/screens/Menu";
+import Login from "./src/Login";
+import SplashScreen from "./src/SplashScreen";
+import Menu from "./src/Menu";
 //InWharHouse
-import WarehousingScanningScreen from "./src/screens/WarehousingScanning";
-import ConfirmBox from "./src/screens/ConfirmBox";
-import DetailBox from "./src/screens/DetailBox";
-import WSdetail from "./src/screens/wsdetail";
+import InWarehouse from "./src/InWarehouse/InWarehouse";
+import InWarehouseConfirmBox from "./src/InWarehouse/InWarehouseConfirmBox";
+import InWarehouseSNBox from "./src/InWarehouse/InWarehouseSNBox";
+import InWarehouseSNConfirm from "./src/InWarehouse/InWarehouseSNConfirm";
+import InWarehouseSN from "./src/InWarehouse/InWarehouseSN";
 
 //DeliverySAP
 import DeliverySAP from "./src/Delivery/DeliverySAP";
@@ -53,6 +55,35 @@ import PalletNotInSN from "./src/PalletNotIn/PalletNotInSN";
 //Inventory
 import PD from "./src/Inventory/PD";
 
+//DeliveryReturn
+import DeliveryReturnNo from "./src/DeliveryReturn/DeliveryReturnNo";
+import DeliveryReturn from "./src/DeliveryReturn/DeliveryReturn";
+import DeliveryReturnSNConfirmBox from "./src/DeliveryReturn/DeliveryReturnSNConfirmBox";
+import DeliveryReturnSNConfirm from "./src/DeliveryReturn/DeliveryReturnSNConfirm";
+import DeliveryReturnSNBox from "./src/DeliveryReturn/DeliveryReturnSNBox";
+import DeliveryReturnSN from "./src/DeliveryReturn/DeliveryReturnSN";
+
+
+//AssemblyDisassembly
+import Assembly from "./src/AssemblyDisassembly/Assembly";
+import Disassembly from "./src/AssemblyDisassembly/Disassembly";
+import ModelSelect from "./src/AssemblyDisassembly/ModelSelect";
+
+//DistributorReturn
+import DistributorReturnNo from "./src/DistributorReturn/DistributorReturnNo";
+import DistributorReturn from "./src/DistributorReturn/DistributorReturn";
+import DistributorReturnSNConfirm from "./src/DistributorReturn/DistributorReturnSNConfirm";
+import DistributorReturnSN from "./src/DistributorReturn/DistributorReturnSN";
+
+//SNReturn
+
+import SNReturn from "./src/SNReturn/SNReturn";
+
+
+
+
+
+
 const Stack = createNativeStackNavigator();
 
 export default function App() {
@@ -60,17 +91,20 @@ export default function App() {
     <GlobalProvider>
       <NavigationContainer>
         <Stack.Navigator
-          initialRouteName="Login"
+          initialRouteName="SplashScreen"
           screenOptions={{ headerShown: false }}
         >
+          <Stack.Screen name="SplashScreen" component={SplashScreen} />
           <Stack.Screen name="Login" component={Login} />
           <Stack.Screen name="Menu" component={Menu} />
 
 
-          <Stack.Screen name="WarehousingScanning" component={WarehousingScanningScreen} />
-          <Stack.Screen name="ConfirmBox" component={ConfirmBox} />
-          <Stack.Screen name="DetailBox" component={DetailBox} />
-          <Stack.Screen name="WSdetail" component={WSdetail} />
+
+          <Stack.Screen name="InWarehouse" component={InWarehouse} />
+          <Stack.Screen name="InWarehouseConfirmBox" component={InWarehouseConfirmBox} />
+          <Stack.Screen name="InWarehouseSNBox" component={InWarehouseSNBox} />
+          <Stack.Screen name="InWarehouseSNConfirm" component={InWarehouseSNConfirm} />
+          <Stack.Screen name="InWarehouseSN" component={InWarehouseSN} />
 
 
           <Stack.Screen name="DeliverySAP" component={DeliverySAP} />
@@ -106,6 +140,26 @@ export default function App() {
           <Stack.Screen name="PalletNotInSN" component={PalletNotInSN} />
 
           <Stack.Screen name="PD" component={PD} />
+
+          <Stack.Screen name="DeliveryReturnNo" component={DeliveryReturnNo} />
+          <Stack.Screen name="DeliveryReturn" component={DeliveryReturn} />
+          <Stack.Screen name="DeliveryReturnSNConfirmBox" component={DeliveryReturnSNConfirmBox} />
+          <Stack.Screen name="DeliveryReturnSNConfirm" component={DeliveryReturnSNConfirm} />
+          <Stack.Screen name="DeliveryReturnSNBox" component={DeliveryReturnSNBox} />
+          <Stack.Screen name="DeliveryReturnSN" component={DeliveryReturnSN} />
+
+
+          <Stack.Screen name="Assembly" component={Assembly} />
+          <Stack.Screen name="Disassembly" component={Disassembly} />
+          <Stack.Screen name="ModelSelect" component={ModelSelect} />
+
+
+          <Stack.Screen name="DistributorReturnNo" component={DistributorReturnNo} />
+          <Stack.Screen name="DistributorReturn" component={DistributorReturn} />
+          <Stack.Screen name="DistributorReturnSNConfirm" component={DistributorReturnSNConfirm} />
+          <Stack.Screen name="DistributorReturnSN" component={DistributorReturnSN} />
+
+          <Stack.Screen name="SNReturn" component={SNReturn} />
 
 
 

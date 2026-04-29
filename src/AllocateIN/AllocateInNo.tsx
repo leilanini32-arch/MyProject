@@ -1,18 +1,20 @@
 import React, { useState, useRef, useEffect } from "react";
+import { SafeAreaView } from 'react-native-safe-area-context';
 import {
     View,
     Text,
     TextInput,
     StyleSheet,
-    SafeAreaView,
     TouchableOpacity,
-    FlatList,
     ScrollView,
     StatusBar,
-    ActivityIndicator,
+    Image,
+    Dimensions,
     Alert,
 } from "react-native";
+import { useFocusEffect } from "@react-navigation/native";
 import { useGlobal } from "../../GlobalContext.tsx";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 interface AllocateInItem {
     systemAllocateCode: string;
@@ -29,8 +31,9 @@ interface AllocateInItem {
 
 export default function AllocateInNO({ navigation }: any) {
     const global = useGlobal();
-    const { gsURL, gs_factoryCode, gs_wareCode } = global;
+    const { gsURL, gs_factoryCode, gs_wareCode, gs_userName, operateUserCode, operateUserName, operateWareHouseCode, operateRandomNumber, operateSign, operateVersion } = global;
     const BASE_URL = gsURL;
+    const [token, setToken] = useState("");
 
     const [sn, setSn] = useState("");
     const [errorMsg, setErrorMsg] = useState("");
@@ -41,12 +44,23 @@ export default function AllocateInNO({ navigation }: any) {
     const [showKeyboard, setShowKeyboard] = useState(false);
 
     const snRef = useRef<TextInput>(null);
+    const scanTimer = useRef<any>(null);
 
     const ensureFocus = () => {
         if (snRef.current) {
             snRef.current.focus();
         }
     };
+
+    useEffect(() => {
+        const loadToken = async () => {
+            const t = await AsyncStorage.getItem("userToken");
+            console.log("TOKEN IN AllocateIN", t);
+            if (t) setToken(t);
+        };
+
+        loadToken();
+    }, []);
 
     useEffect(() => {
         snRef.current?.focus();
@@ -58,14 +72,31 @@ export default function AllocateInNO({ navigation }: any) {
         try {
             const response = await fetch(`${BASE_URL}/api/AllocateInModel`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, },
                 body: JSON.stringify({
                     FactoryCode: gs_factoryCode,
                     SystemAllocateCode: systemAllocateCode,
+                    operateUserCode, operateUserName, operateWareHouseCode, operateRandomNumber, operateSign, operateVersion,
                 }),
             });
 
+            if (response.status === 401) {
+                Alert.alert("Unauthorized", "Token expired or invalid.");
+                return;
+            }
+
+            if (response.status === 403) {
+                Alert.alert("Access Denied", "You do not have permission.");
+                return;
+            }
+
             const result = await response.json();
+
+            if (result.code === 500) {
+                Alert.alert("Error", result.message);
+                navigation.goBack();
+                return;
+            }
             const newItems: AllocateInItem[] = [];
             let tock = "";
 
@@ -91,7 +122,6 @@ export default function AllocateInNO({ navigation }: any) {
 
             if (tock !== "" && tock !== gs_wareCode) {
                 setErrorMsg("To WareHouse Must be Login WareHouse " + gs_wareCode);
-                setSn("");
                 setItems([]);
                 setFSystemAllocateCode("");
                 snRef.current?.focus();
@@ -109,11 +139,42 @@ export default function AllocateInNO({ navigation }: any) {
         }
     };
 
-    const handleSnSubmit = () => {
-        const code = sn.toUpperCase().trim();
-        if (code.length > 0) {
-            fetchAllocateInModelList(code);
 
+    useFocusEffect(
+        React.useCallback(() => {
+            if (f_systemAllocateCode) {
+                fetchAllocateInModelList(f_systemAllocateCode);
+            }
+        }, [f_systemAllocateCode])
+    );
+
+    const handleSnChange = (text: string) => {
+        setSn(text);
+        if (text.includes('\n') || text.includes('\r')) {
+            handleSnSubmit(text.trim());
+            return;
+        }
+
+        if (scanTimer.current) clearTimeout(scanTimer.current);
+        scanTimer.current = setTimeout(() => {
+            if (text.trim().length > 0) {
+                handleSnSubmit(text.trim());
+            }
+        }, 300);
+    };
+
+    const handleSnSubmit = (text?: string) => {
+        const code = (text || sn).trim().toUpperCase();
+        if (code.length > 0) {
+            setSn("");
+            if (scanTimer.current) clearTimeout(scanTimer.current);
+            fetchAllocateInModelList(code);
+        }
+    };
+
+    const handleKeyPress = (e: any) => {
+        if (e.nativeEvent.key === 'Tab') {
+            handleSnSubmit();
         }
     };
 
@@ -121,98 +182,107 @@ export default function AllocateInNO({ navigation }: any) {
         if (selectedIndex !== null && items[selectedIndex]) {
             const allocateCode = items[selectedIndex].allocateCode;
             navigation.navigate('AllocateInFrm', { allocateCode });
-        } else if (items.length > 0) {
-            navigation.navigate('AllocateInFrm', { allocateCode: items[0].allocateCode });
         } else {
             setErrorMsg("Please select an item first");
         }
     };
 
     const renderItem = ({ item, index }: { item: AllocateInItem; index: number }) => {
-        let textColor = "#000";
+        let textColor = "#334155";
         if (item.cyqty > 0) {
-            textColor = item.inqty > 0 ? "blue" : "red";
+            textColor = item.inqty > 0 ? "#2563EB" : "#EF4444";
         }
         const isSelected = selectedIndex === index;
 
         return (
             <TouchableOpacity
-                style={[styles.row, isSelected && styles.selectedRow]}
+                key={item.allocateCode + "_" + index}
+                style={[styles.tableRow, isSelected && styles.selectedRow]}
                 onPress={() => setSelectedIndex(index)}
             >
-                <Text style={[styles.cell, { color: textColor }]}>{item.systemAllocateCode}</Text>
-                <Text style={[styles.cell, { color: textColor }]}>{item.model}</Text>
-                <Text style={[styles.cell, { color: textColor }]}>{item.color}</Text>
-                <Text style={[styles.cell, { color: textColor }]}>{item.qty}</Text>
-                <Text style={[styles.cell, { color: textColor }]}>{item.outqty}</Text>
-                <Text style={[styles.cell, { color: textColor }]}>{item.inqty}</Text>
-                <Text style={[styles.cell, { color: textColor }]}>{item.cyqty}</Text>
-                <Text style={[styles.cell, { color: textColor }]}>{item.fromWareHouse}</Text>
-                <Text style={[styles.cell, { color: textColor }]}>{item.toWareHouse}</Text>
-                <Text style={[styles.cell, { color: textColor }]}>{item.allocateCode}</Text>
+                <Text style={[styles.cell, { color: textColor, width: 120 }]}>{item.systemAllocateCode}</Text>
+                <Text style={[styles.cell, { color: textColor, width: 120 }]}>{item.model}</Text>
+                <Text style={[styles.cell, { color: textColor, width: 100 }]}>{item.color}</Text>
+                <Text style={[styles.cell, { color: textColor, width: 60 }]}>{item.qty}</Text>
+                <Text style={[styles.cell, { color: textColor, width: 60 }]}>{item.outqty}</Text>
+                <Text style={[styles.cell, { color: textColor, width: 60 }]}>{item.inqty}</Text>
+                <Text style={[styles.cell, { color: textColor, width: 60 }]}>{item.cyqty}</Text>
+                <Text style={[styles.cell, { color: textColor, width: 100 }]}>{item.fromWareHouse}</Text>
+                <Text style={[styles.cell, { color: textColor, width: 100 }]}>{item.toWareHouse}</Text>
+                <Text style={[styles.cell, { color: textColor, width: 200 }]}>{item.allocateCode}</Text>
             </TouchableOpacity>
         );
     };
 
+    const handleReturn = () => {
+        navigation.goBack();
+    };
+
     return (
         <SafeAreaView style={styles.container}>
-            <StatusBar barStyle="light-content" backgroundColor="#1E1B4B" />
+            <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
+
             <View style={styles.header}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <View>
-                        <Text style={styles.headerTitle}>Allocate In Scanning</Text>
-                        <Text style={styles.headerSubtitle}>Scan Allocate NO</Text>
-                    </View>
-                    {loading && <ActivityIndicator color="#FFF" />}
+                <View style={styles.headerLeft}>
+                    <TouchableOpacity onPress={handleReturn} activeOpacity={0.7}>
+                        <Image
+                            source={require("../../assets/logo/left.png")}
+                            style={styles.returnLogo}
+                            resizeMode="contain"
+                        />
+                    </TouchableOpacity>
+                    <Text style={styles.headerTitle}>AllocateIn NO Scann</Text>
+                </View>
+
+                <View style={styles.headerRight}>
+                    <Text style={styles.userNameText}>{gs_userName}</Text>
                 </View>
             </View>
 
             <View style={styles.content}>
-                <View style={styles.card}>
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                        <Text style={styles.cardTitle}>Scan Allocate Code</Text>
-                        <TouchableOpacity 
-                            onPress={() => {
-                                setShowKeyboard(!showKeyboard);
-                                setTimeout(() => snRef.current?.focus(), 100);
-                            }}
-                            style={styles.keyboardToggle}
-                        >
-                            <Text style={styles.keyboardToggleText}>
-                                {showKeyboard ? "⌨️ Hide Keyboard" : "⌨️ Show Keyboard"}
-                            </Text>
-                        </TouchableOpacity>
-                    </View>
-                    {errorMsg ? <Text style={styles.errorText}>{errorMsg}</Text> : null}
 
-                    <TextInput
-                        ref={snRef}
-                        style={styles.input}
-                        value={sn}
-                        onChangeText={setSn}
-                        onSubmitEditing={handleSnSubmit}
-                        placeholder="Scan or enter Allocate Code"
-                        autoCapitalize="characters"
-                        showSoftInputOnFocus={showKeyboard}
-                        blurOnSubmit={false}
-                        onBlur={ensureFocus}
-                    />
-                </View>
+                {errorMsg ? <Text style={styles.errorText}>{errorMsg}</Text> : null}
 
-                <View style={[styles.card, { flex: 1 }]}>
-                    <Text style={styles.cardTitle}>Allocate Details</Text>
+                <TextInput
+                    ref={snRef}
+                    style={styles.input}
+                    value={sn}
+                    onChangeText={handleSnChange}
+                    onSubmitEditing={() => handleSnSubmit()}
+                    onKeyPress={handleKeyPress}
+                    placeholder="BON NO"
+                    placeholderTextColor="#334155"
+                    autoCapitalize="characters"
+                    showSoftInputOnFocus={showKeyboard}
+                    blurOnSubmit={false}
+                    onBlur={ensureFocus}
+                />
+
+
+                <View style={styles.tableCard}>
                     <ScrollView horizontal showsHorizontalScrollIndicator={true}>
                         <View>
-                            <View style={[styles.row, styles.tableHeader]}>
-                                {["Sys Code", "Model", "Color", "QTY", "Out", "In", "Diff", "From", "To", "Code"].map((h) => (
-                                    <Text key={h} style={[styles.cell, styles.headerCell]}>{h}</Text>
-                                ))}
+                            <View style={styles.tableHeader}>
+                                <Text style={[styles.headerCell, { width: 120 }]}>BON NO</Text>
+                                <Text style={[styles.headerCell, { width: 120 }]}>Model</Text>
+                                <Text style={[styles.headerCell, { width: 100 }]}>Color</Text>
+                                <Text style={[styles.headerCell, { width: 60 }]}>QTY</Text>
+                                <Text style={[styles.headerCell, { width: 60 }]}>Out</Text>
+                                <Text style={[styles.headerCell, { width: 60 }]}>In</Text>
+                                <Text style={[styles.headerCell, { width: 60 }]}>Diff</Text>
+                                <Text style={[styles.headerCell, { width: 100 }]}>From</Text>
+                                <Text style={[styles.headerCell, { width: 100 }]}>To</Text>
+                                <Text style={[styles.headerCell, { width: 150 }]}>Allocate</Text>
                             </View>
                             <ScrollView style={{ flex: 1 }}>
                                 {items.length === 0 ? (
-                                    <Text style={styles.empty}>Waiting for Scanning...</Text>
+                                    <Text style={styles.emptyText}>Waiting for Scanning...</Text>
                                 ) : (
-                                    items.map((item, index) => renderItem({ item, index }))
+                                    items.map((item, index) => (
+                                        <React.Fragment key={item.allocateCode + "_" + index}>
+                                            {renderItem({ item, index })}
+                                        </React.Fragment>
+                                    ))
                                 )}
                             </ScrollView>
                         </View>
@@ -223,69 +293,74 @@ export default function AllocateInNO({ navigation }: any) {
                     <TouchableOpacity style={styles.primaryButton} onPress={handleChoice}>
                         <Text style={styles.primaryButtonText}>Choice</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.secondaryButton} onPress={() => navigation.goBack()}>
-                        <Text style={styles.secondaryButtonText}>Exit</Text>
-                    </TouchableOpacity>
                 </View>
             </View>
         </SafeAreaView>
     );
 }
 
+const { width, height } = Dimensions.get("window");
+const isSmallDevice = width < 360;
+const scale = (size: number) => (width / 375) * size;
+
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: "#F8FAFC" },
     header: {
-        backgroundColor: "#1E1B4B",
-        padding: 20,
-        borderBottomLeftRadius: 30,
-        borderBottomRightRadius: 30,
+        backgroundColor: "#0052cc",
+        paddingHorizontal: width * 0.05,
+        height: scale(56),
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        elevation: 4,
     },
-    headerTitle: { color: "#fff", fontSize: 18, fontWeight: "900" },
-    headerSubtitle: { color: "#A5B4FC", fontSize: 12, marginTop: 4 },
-    content: { flex: 1, padding: 15 },
-    card: {
-        backgroundColor: "#fff",
-        borderRadius: 16,
-        padding: 16,
-        marginBottom: 15,
-        elevation: 2,
-        borderWidth: 1,
-        borderColor: "#E2E8F0",
+    headerLeft: {
+        flexDirection: "row",
+        alignItems: "center",
     },
-    cardTitle: { fontSize: 13, fontWeight: "900", marginBottom: 10, color: "#475569", textTransform: "uppercase" },
+    returnLogo: {
+        width: scale(24),
+        height: scale(24),
+        marginRight: 10,
+        tintColor: "#FFFFFF",
+    },
+    headerTitle: {
+        color: "#FFFFFF",
+        fontSize: isSmallDevice ? scale(14) : scale(16),
+        fontWeight: "900",
+    },
+    headerRight: {
+        flexDirection: "row",
+        alignItems: "center",
+    },
+    userNameText: {
+        color: "#FFFFFF",
+        fontSize: scale(12),
+        fontWeight: "700",
+        marginRight: 1,
+    },
+    content: { flex: 1, padding: 16 },
+    tableCard: { flex: 1, backgroundColor: "#FFF", borderRadius: 16, overflow: "hidden", elevation: 2, borderWidth: 1, borderColor: "#0052cc", marginBottom: 16, marginHorizontal: -6 },
     input: {
-        backgroundColor: "#F1F5F9",
-        padding: 10,
+        backgroundColor: "#e2f0eeff",
+        height: 40,
         borderRadius: 10,
-        marginTop: 4,
+        paddingHorizontal: 12,
         fontSize: 14,
-        color: "#000",
+        color: "#1E293B",
+        fontWeight: "600",
         borderWidth: 1,
-        borderColor: "#CBD5E1",
+        borderColor: "#0052cc",
+        marginBottom: 12
     },
-    tableHeader: { backgroundColor: "#F1F5F9", borderRadius: 8, marginBottom: 5 },
-    row: { flexDirection: "row", borderBottomWidth: 1, borderBottomColor: "#F1F5F9" },
-    cell: { width: 90, padding: 12, fontSize: 11, textAlign: "center", fontWeight: "600" },
-    headerCell: { fontWeight: "900", fontSize: 10, color: "#64748B", textTransform: "uppercase" },
-    empty: { textAlign: "center", padding: 40, color: "#94A3B8", fontStyle: "italic", width: 900 },
-    actions: { flexDirection: 'row', gap: 12, marginTop: 10 },
-    primaryButton: { flex: 1, backgroundColor: "#2563EB", padding: 15, borderRadius: 12, justifyContent: "center", alignItems: "center" },
-    primaryButtonText: { color: "#fff", fontWeight: "900", fontSize: 16 },
-    secondaryButton: { flex: 1, backgroundColor: "#FEE2E2", padding: 15, borderRadius: 12, justifyContent: "center", alignItems: "center", borderWidth: 1, borderColor: "#FECACA" },
-    secondaryButtonText: { color: "#EF4444", fontWeight: "900", fontSize: 16 },
+    tableHeader: { flexDirection: "row", backgroundColor: "#0052cc", paddingVertical: 10 },
+    tableRow: { flexDirection: "row", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#F1F5F9", alignItems: "center" },
+    cell: { fontSize: 11, color: "#334155", textAlign: "center", fontWeight: "600" },
+    headerCell: { fontSize: 10, fontWeight: "800", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
+    emptyText: { textAlign: "center", padding: 40, color: "#94A3B8", fontStyle: "italic", width: 830 },
+    actions: { borderTopWidth: 1, borderTopColor: '#e2e8f0', paddingTop: 2 },
+    primaryButton: { height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0052cc' },
+    primaryButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
     errorText: { color: "#EF4444", fontSize: 12, marginBottom: 8, fontWeight: "700" },
     selectedRow: { backgroundColor: "#E0E7FF" },
-    keyboardToggle: {
-        backgroundColor: '#F1F5F9',
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 6,
-        borderWidth: 1,
-        borderColor: '#CBD5E1',
-    },
-    keyboardToggleText: {
-        fontSize: 10,
-        fontWeight: '700',
-        color: '#4F46E5',
-    },
 });

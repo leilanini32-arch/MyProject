@@ -1,18 +1,20 @@
 import React, { useState, useRef, useEffect } from "react";
+import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   View,
   Text,
   TextInput,
   StyleSheet,
-  SafeAreaView,
   TouchableOpacity,
-  FlatList,
   ScrollView,
   StatusBar,
   ActivityIndicator,
+  Image,
+  Dimensions,
   Alert,
 } from "react-native";
 import { useGlobal } from "../../GlobalContext.tsx";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 interface AllocateItem {
   bonNo: string;
@@ -28,8 +30,15 @@ interface AllocateItem {
 
 export default function AllocateSAP({ navigation }: any) {
   const global = useGlobal();
-  const { gsURL, gs_factoryCode, gs_wareCode, gs_userCode, gs_userName } = global;
+  const { gsURL, gs_factoryCode, gs_wareCode, gs_userCode, gs_userName,
+    operateUserCode, operateUserName, operateWareHouseCode, operateRandomNumber, operateSign, operateVersion,
+   } = global;
   const BASE_URL = gsURL;
+  const [token, setToken] = useState("");
+
+  const [currentBonNo, setCurrentBonNo] = useState("");
+  const [fromWarehouse, setFromWarehouse] = useState("");
+  const [toWarehouse, setToWarehouse] = useState("");
 
   const [bonNo, setBonNo] = useState("");
   const [depotNo, setDepotNo] = useState("");
@@ -40,14 +49,20 @@ export default function AllocateSAP({ navigation }: any) {
   const [loading, setLoading] = useState(false);
   const [showKeyboard, setShowKeyboard] = useState(false);
 
-  // Internal tracking variables
-  const [f_systemAllocateCode, setFSystemAllocateCode] = useState("");
-  const [f_fromck, setFFromck] = useState("");
-  const [f_tock, setFTock] = useState("");
-
   const bonRef = useRef<TextInput>(null);
   const depotRef = useRef<TextInput>(null);
   const modelRef = useRef<TextInput>(null);
+
+
+  useEffect(() => {
+    const loadToken = async () => {
+      const t = await AsyncStorage.getItem("userToken");
+      console.log("TOKEN IN Allocateout", t);
+      if (t) setToken(t);
+    };
+
+    loadToken();
+  }, []);
 
   const ensureFocus = () => {
     if (bonRef.current?.isFocused() || depotRef.current?.isFocused() || modelRef.current?.isFocused()) return;
@@ -60,20 +75,33 @@ export default function AllocateSAP({ navigation }: any) {
   const fetchAllocatePlan = async (systemAllocateCode: string) => {
     setErrorMsg("");
     setLoading(true);
+
     try {
       // 1. Get SAP Bill
       const sapResponse = await fetch(`${BASE_URL}/api/SAPBill/GetSAPBill`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, },
         body: JSON.stringify({
+          operateUserCode, operateUserName, operateWareHouseCode, operateRandomNumber, operateSign, operateVersion,
           MAIN_BILL_CODE: systemAllocateCode,
           UserCode: gs_userCode,
           UserName: gs_userName,
         }),
       });
+
+      if (sapResponse.status === 401) {
+        Alert.alert("Unauthorized", "Token expired or invalid.");
+        return;
+      }
+
+      if (sapResponse.status === 403) {
+        Alert.alert("Access Denied", "You do not have permission.");
+        return;
+      }
       const sapResult = await sapResponse.json();
+      console.log("sapResult / ", sapResult);
       if (sapResult && sapResult.message) {
-        setErrorMsg("SAP msg: " + sapResult.message);
+        setErrorMsg("SAP msg:" + sapResult.message);
       }
     } catch (err: any) {
       setErrorMsg("SAP Error: " + err.message);
@@ -82,14 +110,33 @@ export default function AllocateSAP({ navigation }: any) {
     try {
       const planResponse = await fetch(`${BASE_URL}/api/AllocateModel`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, },
         body: JSON.stringify({
+          operateUserCode, operateUserName, operateWareHouseCode, operateRandomNumber, operateSign, operateVersion,
           FactoryCode: gs_factoryCode,
           SystemAllocateCode: systemAllocateCode,
         }),
       });
 
+      if (planResponse.status === 401) {
+        Alert.alert("Unauthorized", "Token expired or invalid.");
+        return;
+      }
+
+      if (planResponse.status === 403) {
+        Alert.alert("Access Denied", "You do not have permission.");
+        return;
+      }
+
+
       const planData = await planResponse.json();
+
+      if (planData.code === 500) {
+        Alert.alert("Error", planData.message);
+        navigation.goBack();
+        return;
+      }
+      console.log("ROW =", planData);
       const newItems: AllocateItem[] = [];
       let fromck = "";
       let tock = "";
@@ -101,8 +148,8 @@ export default function AllocateSAP({ navigation }: any) {
             model: row.model,
             color: row.color,
             qty: parseInt(row.qty),
-            finishQty: parseInt(row.okqty),
-            difference: parseInt(row.cyqty),
+            finishQty: parseInt(row.okQty),
+            difference: parseInt(row.cyQty),
             from: row.fromWareHouse,
             to: row.toWareHouse,
             allocateCode: row.allocateCode,
@@ -112,6 +159,10 @@ export default function AllocateSAP({ navigation }: any) {
         });
       }
 
+      setCurrentBonNo(systemAllocateCode);
+      setFromWarehouse(fromck);
+      setToWarehouse(tock);
+
       setItems(newItems);
       console.log("FROM CK:", fromck);
       console.log("LOGIN CK:", gs_wareCode);
@@ -119,17 +170,12 @@ export default function AllocateSAP({ navigation }: any) {
         setErrorMsg("Source WareHouse Must be Login WareHouse " + gs_wareCode);
         setBonNo("");
         setItems([]);
-        setFSystemAllocateCode("");
         bonRef.current?.focus();
         return;
       }
 
-      setFSystemAllocateCode(systemAllocateCode);
-
       if (fromck !== "") {
         setDepotNo(fromck + "#" + tock);
-        setFFromck(fromck);
-        setFTock(tock);
         modelRef.current?.focus();
       } else {
         setDepotNo("");
@@ -143,6 +189,16 @@ export default function AllocateSAP({ navigation }: any) {
     }
   };
 
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      if (currentBonNo) {
+        fetchAllocatePlan(currentBonNo);
+      }
+    });
+
+    return unsubscribe;
+  }, [navigation, currentBonNo]);
+
   const handleBonSubmit = () => {
     const sn = bonNo.toUpperCase().trim();
     if (sn.length > 0) {
@@ -150,143 +206,141 @@ export default function AllocateSAP({ navigation }: any) {
     }
   };
 
-  const handleChoice = () => {
-    if (selectedIndex !== null && items[selectedIndex]) {
-      const allocateCode = items[selectedIndex].allocateCode;
-      navigation.navigate('AllocateFrm', { allocateCode });
-      console.log(allocateCode)
-    } else if (items.length > 0) {
-      navigation.navigate('AllocateFrm', { allocateCode: items[0].allocateCode });
-    } else {
-      setErrorMsg("Please select an item first");
-    }
+  const scanTimer = useRef<any>(null);
+
+  const handleBonChange = (text: string) => {
+    setBonNo(text);
+
+    clearTimeout(scanTimer.current);
+
+    scanTimer.current = setTimeout(() => {
+      const sn = text.toUpperCase().trim();
+
+      if (sn.length > 0) {
+        fetchAllocatePlan(sn);
+      }
+    }, 200);
   };
 
+  const handleChoice = () => {
+    if (selectedIndex === null) {
+      setErrorMsg("Please select an item first");
+      return;
+    }
 
+    const allocateCode = items[selectedIndex].allocateCode;
+    navigation.navigate("AllocateFrm", { allocateCode });
+  };
+
+  const handleReturn = () => {
+    navigation.goBack();
+  };
 
   const renderItem = ({ item, index }: { item: AllocateItem; index: number }) => {
-    let textColor = "#000";
+    let textColor = "#334155";
     if (item.difference > 0) {
-      textColor = item.finishQty > 0 ? "blue" : "red";
+      textColor = item.finishQty > 0 ? "#2563EB" : "#EF4444";
     }
     const isSelected = selectedIndex === index;
 
     return (
       <TouchableOpacity
-        style={[styles.row, isSelected && styles.selectedRow]}
+        key={index}
+        style={[styles.tableRow, isSelected && styles.selectedRow]}
         onPress={() => setSelectedIndex(index)}
       >
-        <Text style={[styles.cell, { color: textColor }]}>{item.bonNo}</Text>
-        <Text style={[styles.cell, { color: textColor }]}>{item.model}</Text>
-        <Text style={[styles.cell, { color: textColor }]}>{item.color}</Text>
-        <Text style={[styles.cell, { color: textColor }]}>{item.qty}</Text>
-        <Text style={[styles.cell, { color: textColor }]}>{item.finishQty}</Text>
-        <Text style={[styles.cell, { color: textColor }]}>{item.difference}</Text>
-        <Text style={[styles.cell, { color: textColor }]}>{item.from}</Text>
-        <Text style={[styles.cell, { color: textColor }]}>{item.to}</Text>
-        <Text style={[styles.cell, { color: textColor }]}>{item.allocateCode}</Text>
+        <Text style={[styles.cell, { color: textColor, width: 120 }]}>{item.bonNo}</Text>
+        <Text style={[styles.cell, { color: textColor, width: 120 }]}>{item.model}</Text>
+        <Text style={[styles.cell, { color: textColor, width: 150 }]}>{item.color}</Text>
+        <Text style={[styles.cell, { color: textColor, width: 60 }]}>{item.qty}</Text>
+        <Text style={[styles.cell, { color: textColor, width: 60 }]}>{item.finishQty}</Text>
+        <Text style={[styles.cell, { color: textColor, width: 60 }]}>{item.difference}</Text>
+        <Text style={[styles.cell, { color: textColor, width: 100 }]}>{item.from}</Text>
+        <Text style={[styles.cell, { color: textColor, width: 100 }]}>{item.to}</Text>
+        <Text style={[styles.cell, { color: textColor, width: 220 }]}>{item.allocateCode}</Text>
       </TouchableOpacity>
     );
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#1E1B4B" />
+      <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
       <View style={styles.header}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-          <View>
-            <Text style={styles.headerTitle}>Warehouse Allocate Scanning</Text>
-            <Text style={styles.headerSubtitle}>ScanNO SAP</Text>
-          </View>
-          {loading && <ActivityIndicator color="#FFF" />}
+        <View style={styles.headerLeft}>
+          <TouchableOpacity onPress={handleReturn} activeOpacity={0.7}>
+            <Image
+              source={require("../../assets/logo/left.png")}
+              style={styles.returnLogo}
+              resizeMode="contain"
+            />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Allocate out SAP</Text>
+        </View>
+        <View style={styles.headerRight}>
+          <Text style={styles.userNameText}>{gs_userName}</Text>
         </View>
       </View>
 
-      <ScrollView 
-        style={styles.content} 
-        contentContainerStyle={{ flexGrow: 1, paddingBottom: 20 }}
-        keyboardShouldPersistTaps="handled"
-      >
+      <View style={styles.content}>
         <View style={styles.card}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-            <Text style={styles.cardTitle}>Allocate Entry</Text>
-            <TouchableOpacity 
-              onPress={() => {
-                setShowKeyboard(!showKeyboard);
-                bonRef.current?.focus();
-              }}
-              style={styles.keyboardToggle}
-            >
-              <Text style={styles.keyboardToggleText}>
-                {showKeyboard ? "⌨️ Hide Keyboard" : "⌨️ Show Keyboard"}
-              </Text>
-            </TouchableOpacity>
-          </View>
           {errorMsg ? <Text style={styles.errorText}>{errorMsg}</Text> : null}
 
-          <View style={styles.compactInputRow}>
-            <Text style={styles.compactLabel}>BON NO.</Text>
+          <View style={styles.inputGroup1}>
             <TextInput
               ref={bonRef}
-              style={styles.compactInput}
-              value={bonNo}
-              onChangeText={setBonNo}
+              style={styles.input1}
+              defaultValue=""
+              onChangeText={handleBonChange}
               onSubmitEditing={handleBonSubmit}
-              placeholder="Scan BON"
+              placeholder=" BON NO"
               autoCapitalize="characters"
+              placeholderTextColor="#334155"
               showSoftInputOnFocus={showKeyboard}
               blurOnSubmit={false}
               onBlur={ensureFocus}
+              scrollEnabled={false}
             />
           </View>
 
-          <View style={styles.compactInputRow}>
-            <Text style={styles.compactLabel}>DEPOT</Text>
+          <View style={styles.inputGroup}>
             <TextInput
               ref={depotRef}
-              style={styles.compactInput}
+              style={styles.input}
               value={depotNo}
               onChangeText={setDepotNo}
-              placeholder="from#to"
+              placeholder="DEPOT NO"
               autoCapitalize="characters"
+              placeholderTextColor="#FFFFFF"
               showSoftInputOnFocus={showKeyboard}
               blurOnSubmit={false}
               onBlur={ensureFocus}
-            />
-          </View>
+              scrollEnabled={false}
 
-          <View style={styles.compactInputRow}>
-            <Text style={styles.compactLabel}>MODEL</Text>
-            <TextInput
-              ref={modelRef}
-              style={styles.compactInput}
-              value={modelInput}
-              onChangeText={setModelInput}
-              placeholder="model#qty#price"
-              autoCapitalize="characters"
-              showSoftInputOnFocus={showKeyboard}
-              blurOnSubmit={false}
-              onBlur={ensureFocus}
             />
           </View>
         </View>
 
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Allocate Details</Text>
+        <View style={styles.tableCard}>
           <ScrollView horizontal showsHorizontalScrollIndicator={true}>
             <View>
-              <View style={[styles.row, styles.tableHeader]}>
-                {["BON NO", "Model", "Color", "QTY", "Finish", "Diff", "From", "To", "Code"].map((h) => (
-                  <Text key={h} style={[styles.cell, styles.headerCell]}>{h}</Text>
-                ))}
+              <View style={styles.tableHeader}>
+                <Text style={[styles.headerCell, { width: 120 }]}>BON NO</Text>
+                <Text style={[styles.headerCell, { width: 120 }]}>Model</Text>
+                <Text style={[styles.headerCell, { width: 150 }]}>Color</Text>
+                <Text style={[styles.headerCell, { width: 60 }]}>QTY</Text>
+                <Text style={[styles.headerCell, { width: 60 }]}>Finish</Text>
+                <Text style={[styles.headerCell, { width: 60 }]}>Diff</Text>
+                <Text style={[styles.headerCell, { width: 100 }]}>From</Text>
+                <Text style={[styles.headerCell, { width: 100 }]}>To</Text>
+                <Text style={[styles.headerCell, { width: 150 }]}>Code</Text>
               </View>
-              <View>
+              <ScrollView style={{ flex: 1 }}>
                 {items.length === 0 ? (
-                  <Text style={styles.empty}>Waiting for Scanning...</Text>
+                  <Text style={styles.emptyText}>Waiting for Scanning...</Text>
                 ) : (
                   items.map((item, index) => renderItem({ item, index }))
                 )}
-              </View>
+              </ScrollView>
             </View>
           </ScrollView>
         </View>
@@ -295,82 +349,80 @@ export default function AllocateSAP({ navigation }: any) {
           <TouchableOpacity style={styles.primaryButton} onPress={handleChoice}>
             <Text style={styles.primaryButtonText}>Choice</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.secondaryButton} onPress={() => navigation.goBack()}>
-            <Text style={styles.secondaryButtonText}>Exit</Text>
-          </TouchableOpacity>
         </View>
-      </ScrollView>
+      </View>
+
+      {loading && (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="large" color="#4F46E5" />
+        </View>
+      )}
     </SafeAreaView>
   );
 }
 
+const { width, height } = Dimensions.get("window");
+const isSmallDevice = width < 360;
+const scale = (size: number) => (width / 375) * size;
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F8FAFC" },
   header: {
-    backgroundColor: "#1E1B4B",
-    padding: 20,
-    borderBottomLeftRadius: 30,
-    borderBottomRightRadius: 30,
+    backgroundColor: "#0052cc",
+    paddingHorizontal: width * 0.05,
+    height: scale(56),
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    elevation: 4,
   },
-  headerTitle: { color: "#fff", fontSize: 18, fontWeight: "900" },
-  headerSubtitle: { color: "#A5B4FC", fontSize: 12, marginTop: 4 },
-  content: { flex: 1, padding: 15 },
-  card: {
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 15,
-    elevation: 2,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
+  headerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
   },
-  cardTitle: { fontSize: 13, fontWeight: "900", marginBottom: 10, color: "#475569", textTransform: "uppercase" },
-  compactInputRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
-  compactLabel: { width: 60, fontSize: 11, fontWeight: "700", color: "#64748B" },
-  compactInput: {
-    flex: 1,
-    backgroundColor: "#F1F5F9",
-    padding: 8,
-    borderRadius: 8,
-    fontSize: 13,
-    color: "#000",
-    borderWidth: 1,
-    borderColor: "#CBD5E1",
+  returnLogo: {
+    width: scale(24),
+    height: scale(24),
+    marginRight: 10,
+    tintColor: "#FFFFFF",
   },
-  label: { fontSize: 11, fontWeight: "700", marginTop: 8, color: "#64748B" },
-  input: {
-    backgroundColor: "#F1F5F9",
-    padding: 10,
-    borderRadius: 10,
-    marginTop: 4,
-    fontSize: 14,
-    color: "#000",
-    borderWidth: 1,
-    borderColor: "#CBD5E1",
+  headerTitle: {
+    color: "#FFFFFF",
+    fontSize: isSmallDevice ? scale(14) : scale(16),
+    fontWeight: "900",
   },
-  tableHeader: { backgroundColor: "#F1F5F9", borderRadius: 8, marginBottom: 5 },
-  row: { flexDirection: "row", borderBottomWidth: 1, borderBottomColor: "#F1F5F9" },
-  cell: { width: 90, padding: 12, fontSize: 11, textAlign: "center", fontWeight: "600" },
-  headerCell: { fontWeight: "900", fontSize: 10, color: "#64748B", textTransform: "uppercase" },
-  empty: { textAlign: "center", padding: 40, color: "#94A3B8", fontStyle: "italic", width: 810 },
-  actions: { flexDirection: 'row', gap: 12, marginTop: 10 },
-  primaryButton: { flex: 1, backgroundColor: "#2563EB", padding: 15, borderRadius: 12, justifyContent: "center", alignItems: "center" },
-  primaryButtonText: { color: "#fff", fontWeight: "900", fontSize: 16 },
-  secondaryButton: { flex: 1, backgroundColor: "#FEE2E2", padding: 15, borderRadius: 12, justifyContent: "center", alignItems: "center", borderWidth: 1, borderColor: "#FECACA" },
-  secondaryButtonText: { color: "#EF4444", fontWeight: "900", fontSize: 16 },
+  headerRight: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  userNameText: {
+    color: "#FFFFFF",
+    fontSize: scale(12),
+    fontWeight: "700",
+    marginRight: 1,
+  },
+  content: { flex: 1, padding: 16 },
+  card: { backgroundColor: "#FFF", marginHorizontal: -8, borderRadius: 16, paddingBottom: 8, padding: 12, marginBottom: 8, elevation: 2, borderWidth: 1, borderColor: "#0052cc" },
+  inputGroup: { marginBottom: 4 },
+  input: { backgroundColor: "#0052cc", height: 40, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 0, fontSize: 13, color: "#e2f0eeff", fontWeight: "600", borderWidth: 1, borderColor: "#CBD5E1" },
+  inputGroup1: { marginBottom: 4 },
+  input1: { backgroundColor: "#e2f0eeff", height: 40, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 0, fontSize: 13, color: "#334155", fontWeight: "600", borderWidth: 1, borderColor: "#0052cc" },
+  tableCard: { flex: 1, backgroundColor: "#FFF", marginHorizontal: -8, borderRadius: 16, overflow: "hidden", elevation: 2, borderWidth: 1, borderColor: "#0052cc", marginBottom: 8 },
+  tableHeader: { flexDirection: "row", backgroundColor: "#0052cc", paddingVertical: 10 },
+  headerCell: { fontSize: 10, fontWeight: "800", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
+  tableRow: { flexDirection: "row", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#F1F5F9", alignItems: "center" },
+  cell: { fontSize: 11, color: "#334155", textAlign: "center", fontWeight: "600" },
+  emptyText: { textAlign: "center", padding: 40, color: "#94A3B8", fontStyle: "italic", width: 830 },
+  actions: { borderTopWidth: 1, borderTopColor: '#e2e8f0', paddingTop: 2 },
+  primaryButton: { height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0052cc' },
+  primaryButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
   errorText: { color: "#EF4444", fontSize: 12, marginBottom: 8, fontWeight: "700" },
   selectedRow: { backgroundColor: "#E0E7FF" },
-  keyboardToggle: {
-    backgroundColor: '#F1F5F9',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
-  },
-  keyboardToggleText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#4F46E5',
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(255,255,255,0.7)",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 1000,
   },
 });

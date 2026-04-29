@@ -1,16 +1,19 @@
 import React, { useState, useEffect } from "react";
+import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   View,
   Text,
   ScrollView,
   TouchableOpacity,
   StyleSheet,
-  SafeAreaView,
   StatusBar,
   Alert,
   ActivityIndicator,
+  Image,
+  Dimensions,
 } from "react-native";
 import { useGlobal } from "../../GlobalContext.tsx";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 type BoxDetail = {
   fxh: string;
@@ -26,6 +29,7 @@ export default function DeliverySNBox({ navigation, route }: any) {
   const global = useGlobal();
   const { gsURL } = global;
   const BASE_URL = gsURL;
+  const [token, setToken] = useState("");
 
   const [loading, setLoading] = useState(false);
   const [details, setDetails] = useState<BoxDetail[]>([]);
@@ -33,17 +37,29 @@ export default function DeliverySNBox({ navigation, route }: any) {
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
 
   useEffect(() => {
-    if (deliveryCode) {
-      fetchBoxDetails();
+    const loadToken = async () => {
+      const t = await AsyncStorage.getItem("userToken");
+      console.log("TOKEN IN delivery", t);
+      if (t) setToken(t);
+    };
+
+    loadToken();
+  }, []);
+
+  useEffect(() => {
+    if (token) {
+      if (deliveryCode) {
+        fetchBoxDetails();
+      }
     }
-  }, [deliveryCode]);
+  }, [deliveryCode, token]);
 
   const fetchBoxDetails = async () => {
     setLoading(true);
     try {
       const response = await fetch(`${BASE_URL}/api/DeliveryPalletSNBox`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, },
         body: JSON.stringify({
           FactoryCode: global.gs_factoryCode,
           WareHouseCode: global.gs_wareCode,
@@ -51,8 +67,23 @@ export default function DeliverySNBox({ navigation, route }: any) {
         })
       });
 
+      if (response.status === 401) {
+        Alert.alert("Unauthorized", "Token expired or invalid.");
+        return;
+      }
+
+      if (response.status === 403) {
+        Alert.alert("Access Denied", "You do not have permission.");
+        return;
+      }
+
       const result = await response.json();
-      if (result.message=="success" && result.data && result.data.length > 0) {
+      if (result.code === 500) {
+        Alert.alert("Error", result.message);
+        navigation.goBack();
+        return;
+      }
+      if (result.message == "success" && result.data && result.data.length > 0) {
         const list: BoxDetail[] = result.data.map((item: any) => ({
           fxh: item.fxh,
           palletCode: item.palletCode,
@@ -63,8 +94,8 @@ export default function DeliverySNBox({ navigation, route }: any) {
         }));
 
         setDetails(list);
-        console.log("message5", deliveryCode); 
-        
+        console.log("message5", deliveryCode);
+
         const total = list.reduce((sum, item) => sum + parseInt(item.qty || "0"), 0);
         setTotalQty(total);
       } else {
@@ -97,79 +128,81 @@ export default function DeliverySNBox({ navigation, route }: any) {
   const tableHeaders = ["FXH", "Pallet", "Box", "Qty", "Model", "Color"];
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="light-content" backgroundColor="#1E1B4B" />
+    <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
 
       {/* Header */}
       <View style={styles.header}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+        <View style={styles.headerLeft}>
+          <TouchableOpacity onPress={() => navigation.goBack()} activeOpacity={0.7}>
+            <Image
+              source={require("../../assets/logo/left.png")}
+              style={styles.returnLogo}
+              resizeMode="contain"
+            />
+          </TouchableOpacity>
           <Text style={styles.headerTitle}>Delivery Box Details</Text>
-          {loading && <ActivityIndicator color="#FFF" />}
         </View>
-        <Text style={styles.headerSubtitle}>Delivery: {deliveryCode || "N/A"}</Text>
-        <Text style={styles.headerSubtitle}>Total qty: {totalQty}</Text>
+
+        <View style={styles.headerRight}>
+          <Text style={styles.userNameText}>{global.gs_userName}</Text>
+        </View>
       </View>
 
-      <View style={styles.container}>
-        {/* List Card */}
-        <View style={[styles.card, { flex: 1 }]}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>Box List</Text>
-          </View>
-
-          <ScrollView horizontal showsHorizontalScrollIndicator={true}>
-            <View>
-              <View style={styles.tableHeaderRow}>
-                {tableHeaders.map((h) => (
-                  <Text key={h} style={styles.headerCell}>
-                    {h}
-                  </Text>
-                ))}
-              </View>
-
-              <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator>
-                {details.length > 0 ? (
-                  details.map((item, index) => (
-                    <TouchableOpacity 
-                      key={index} 
-                      style={[
-                        styles.tableDataRow, 
-                        selectedIndex === index && styles.selectedRow
-                      ]}
-                      onPress={() => setSelectedIndex(index)}
-                    >
-                      <Text style={styles.cell}>{item.fxh}</Text>
-                      <Text style={styles.cell}>{item.palletCode}</Text>
-                      <Text style={styles.cell}>{item.boxCode}</Text>
-                      <Text style={styles.cell}>{item.qty}</Text>
-                      <Text style={styles.cell}>{item.model}</Text>
-                      <Text style={styles.cell}>{item.color}</Text>
-                    </TouchableOpacity>
-                  ))
-                ) : (
-                  <View style={styles.emptyContainer}>
-                    <Text style={styles.emptyText}>No data available</Text>
-                  </View>
-                )}
-              </ScrollView>
-            </View>
-          </ScrollView>
+      <View style={styles.statsCard}>
+        <View style={styles.statBox}>
+          <Text style={styles.statLabel}>Total Qty</Text>
+          <Text style={styles.statValue}>{totalQty || "0"}</Text>
         </View>
+      </View>
 
-        {/* Actions */}
-        <View style={styles.actionContainer}>
+      {/* List Card */}
+      <View style={styles.tableCard}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={true}>
+          <View>
+            <View style={styles.tableHeader}>
+              {tableHeaders.map((h) => (
+                <Text key={h} style={[styles.headerCell, { width: 90 }]}>
+                  {h}
+                </Text>
+              ))}
+            </View>
+
+            <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator>
+              {details.length > 0 ? (
+                details.map((item, index) => (
+                  <TouchableOpacity
+                    key={index}
+                    style={[
+                      styles.row,
+                      selectedIndex === index && styles.selectedRow
+                    ]}
+                    onPress={() => setSelectedIndex(index)}
+                  >
+                    <Text style={[styles.cell, { width: 90 }]}>{item.fxh}</Text>
+                    <Text style={[styles.cell, { width: 90 }]}>{item.palletCode}</Text>
+                    <Text style={[styles.cell, { width: 90 }]}>{item.boxCode}</Text>
+                    <Text style={[styles.cell, { width: 90 }]}>{item.qty}</Text>
+                    <Text style={[styles.cell, { width: 90 }]}>{item.model}</Text>
+                    <Text style={[styles.cell, { width: 90 }]}>{item.color}</Text>
+                  </TouchableOpacity>
+                ))
+              ) : (
+                <Text style={[styles.emptyText, { width: 540 }]}>No data available</Text>
+              )}
+            </ScrollView>
+          </View>
+        </ScrollView>
+      </View>
+
+      {/* Actions */}
+      <View style={styles.footer}>
+        <View style={styles.buttonRow}>
           <TouchableOpacity
-            style={[styles.btn, styles.btnPrimary]}
+            style={[styles.actionBtn, styles.btnPrimary]}
             onPress={viewSNDetails}
           >
-            <Text style={styles.btnText}>SN Details</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.btn, styles.btnSecondary]}
-            onPress={() => navigation.goBack()}
-          >
-            <Text style={styles.btnTextSecondary}>Exit</Text>
+            <Text style={styles.btnTextPrimary}>Details</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -177,45 +210,71 @@ export default function DeliverySNBox({ navigation, route }: any) {
   );
 }
 
+const { width, height } = Dimensions.get("window");
+const isSmallDevice = width < 360;
+const scale = (size: number) => (width / 375) * size;
+
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#F8FAFC" },
-  container: { flex: 1, padding: 16, paddingBottom: 40 },
+  container: { flex: 1, backgroundColor: "#F8FAFC" },
   header: {
-    backgroundColor: "#1E1B4B",
-    paddingTop: 20,
-    paddingBottom: 20,
-    paddingHorizontal: 20,
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
+    backgroundColor: "#0052cc",
+    paddingHorizontal: width * 0.05,
+    height: scale(56),
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    elevation: 4,
   },
-  headerTitle: { color: "#FFFFFF", fontSize: 20, fontWeight: "800" },
-  headerSubtitle: { color: "#A5B4FC", fontSize: 13, fontWeight: "600", marginTop: 4 },
-  card: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 5,
+  headerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  returnLogo: {
+    width: scale(24),
+    height: scale(24),
+    marginRight: 10,
+    tintColor: "#FFFFFF",
+  },
+  headerTitle: {
+    color: "#FFFFFF",
+    fontSize: isSmallDevice ? scale(14) : scale(16),
+    fontWeight: "900",
+  },
+  headerRight: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  userNameText: {
+    color: "#FFFFFF",
+    fontSize: scale(12),
+    fontWeight: "700",
+    marginRight: 1,
+  },
+  statsCard: { padding: 16, gap: 10 },
+  statBox: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    backgroundColor: "#0052cc",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
     elevation: 2,
+    borderWidth: 1,
+    borderColor: "#E2E8F0"
   },
-  cardHeader: { borderLeftWidth: 4, borderLeftColor: "#4F46E5", paddingLeft: 10, marginBottom: 20 },
-  cardTitle: { fontSize: 14, fontWeight: "800", color: "#475569", textTransform: "uppercase" },
-  tableHeaderRow: { flexDirection: "row", backgroundColor: "#F1F5F9", borderRadius: 8, paddingVertical: 10 },
-  headerCell: { width: 100, textAlign: "center", fontSize: 10, fontWeight: "800", color: "#64748B", textTransform: "uppercase" },
-  tableDataRow: { flexDirection: "row", borderBottomWidth: 1, borderBottomColor: "#F1F5F9" },
+  statLabel: { color: "#FFFFFF", fontSize: 11, fontWeight: "700", textTransform: "uppercase" },
+  statValue: { color: "#FFFFFF", fontSize: 12, fontWeight: "800" },
+  tableCard: { flex: 1, backgroundColor: "#FFF", marginHorizontal: 16, borderRadius: 16, overflow: "hidden", elevation: 2, borderWidth: 1, borderColor: "#E2E8F0", marginBottom: -2 },
+  tableHeader: { flexDirection: "row", backgroundColor: "#0052cc", paddingVertical: 10 },
+  headerCell: { fontSize: 10, fontWeight: "800", color: "#FFFFFF", textAlign: "center", textTransform: "uppercase" },
+  row: { flexDirection: "row", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#F1F5F9", alignItems: "center" },
+  cell: { fontSize: 11, color: "#334155", textAlign: "center", fontWeight: "600" },
+  emptyText: { textAlign: "center", color: "#94A3B8", marginTop: 40, fontStyle: "italic" },
+  footer: { padding: 16 },
+  buttonRow: { flexDirection: 'row', gap: 12 },
+  actionBtn: { flex: 1, height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+  btnPrimary: { backgroundColor: '#2563eb' },
+  btnTextPrimary: { color: '#fff', fontSize: 15, fontWeight: '800' },
   selectedRow: { backgroundColor: "#E0E7FF" },
-  cell: { width: 100, textAlign: "center", paddingVertical: 15, fontSize: 11, color: "#334155", fontWeight: "600" },
-  emptyContainer: { flex: 1, justifyContent: "center", alignItems: "center", paddingTop: 40, width: 600 },
-  emptyText: { color: "#94A3B8", fontStyle: "italic", fontSize: 13 },
-  actionContainer: { flexDirection: "row", gap: 12, marginTop: 10 },
-  btn: { flex: 1, height: 55, borderRadius: 14, justifyContent: "center", alignItems: "center", elevation: 3 },
-  btnPrimary: { backgroundColor: "#2563EB" },
-  btnSecondary: { backgroundColor: "#FEE2E2", borderWidth: 1, borderColor: "#FECACA" },
-  btnText: { color: "#FFFFFF", fontWeight: "800", fontSize: 16 },
-  btnTextSecondary: { color: "#EF4444", fontWeight: "800", fontSize: 16 },
 });
